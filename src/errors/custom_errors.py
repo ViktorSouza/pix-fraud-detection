@@ -99,3 +99,36 @@ class InvalidBirthdate(QIException):
         description = f"The birthdate {birthdate} is not a real date."
         translation = "A data de nascimento informada não existe."
         super().__init__(title, self.code, http_status, description, translation)
+
+
+class NotFoundPixTransaction(QIException):
+    code = "QIT001008"
+
+    def __init__(self, transaction_id) -> None:
+        title = "Pix transaction not found"
+        http_status = 404
+        description = f"Pix transaction {transaction_id} was not found."
+        translation = "A transação Pix não foi encontrada."
+        super().__init__(title, self.code, http_status, description, translation)
+
+
+class DuplicatedPixTransaction(QIException):
+    code = "QIT001009"
+
+    def __init__(self, transaction_id) -> None:
+        title = "Pix transaction already analyzed"
+        http_status = 409
+        description = f"Pix transaction {transaction_id} has already been analyzed."
+        translation = "Esta transação Pix já foi analisada."
+        super().__init__(title, self.code, http_status, description, translation)
+
+
+class InvalidPixTimestamp(QIException):
+    code = "QIT001010"
+
+    def __init__(self, timestamp) -> None:
+        title = "Invalid Pix timestamp"
+        http_status = 422
+        description = f"The timestamp {timestamp} must be a valid date and time with a timezone."
+        translation = "A data e hora da transação devem incluir um fuso horário válido."
+        super().__init__(title, self.code, http_status, description, translation)

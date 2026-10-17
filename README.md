@@ -1,12 +1,137 @@
-# Bootcamp QI Tech — projeto base da API
+# Desafio Antifraude Pix — [Nome do grupo]
 
-Projeto base do Bootcamp: uma API REST em **Python + FastAPI**, com banco
-**PostgreSQL**, rodando em **Docker**.
+**Integrantes:** [nomes]
 
-Você não precisa saber programar para começar. A API e o banco sobem
-no **Docker**, então você não instala nem um nem outro na sua máquina.
-Os **testes** rodam no seu Python — são dois comandos, e a seção 2
-mostra os dois.
+API REST em **Python + FastAPI** e **PostgreSQL**, construída a partir do
+Base Service do Bootcamp QI Tech.
+
+## Como o motor de decisão funciona
+
+O `POST /pix/transaction` valida o contrato JSON, consulta o histórico do
+pagador no PostgreSQL e calcula a decisão no controller. A análise e o
+payload recebido ficam persistidos; `GET /pix/transaction/{id}` recupera
+a decisão gravada. Não há consulta externa nem análise manual no caminho
+da decisão.
+
+## Regras
+
+Valores monetários são centavos. Os limites abaixo são parâmetros
+iniciais explícitos do time e podem ser recalibrados com dados reais.
+
+| Regra | Lógica | Parâmetros | Por quê |
+|---|---|---|---|
+| Teto por transação | Reprova acima do limite | R$ 5.000 (`500000` centavos) | Interrompe uma saída individual muito alta antes da autorização. |
+| Acumulado do pagador | Reprova se a soma das transações aprovadas nas últimas 24h mais a atual ultrapassar o limite | R$ 3.000 (`300000` centavos), janela móvel de 24h | Detecta fracionamento e exposição diária; só decisões `approved` anteriores compõem o total. |
+| Valor elevado | Pede 2FA a partir do limite, inclusive | R$ 1.000 (`100000` centavos) | Acrescenta confirmação proporcional ao impacto financeiro. |
+| Conta de destino recente | Pede 2FA se a conta recebedora tiver menos de 7 dias na data do Pix | 7 dias | Uma contraparte recém-aberta ainda tem pouco histórico observável. |
+| Velocidade | Pede 2FA quando já existem pelo menos 3 Pix aprovados do pagador nos 10 minutos anteriores | Janela móvel de 10 min; o atual é o 4º | Captura rajadas incompatíveis com o ritmo normal. |
+| Novo destino ou dispositivo | Para pagador com Pix aprovado nas últimas 24h, pede 2FA se o destino (ISPB, agência e conta) ou aparelho não aparece nesse perfil | Perfil de 24h | Usa a familiaridade da contraparte e do aparelho sem fricção no primeiro uso do cliente. |
+
+## Como as regras viram decisão
+
+1. Qualquer teto excedido resulta em `rejected`.
+2. Sem reprovação, uma ou mais regras de confirmação resultam em
+   `two_factor_required`.
+3. Sem regra acionada, o Pix recebe `approved`.
+
+`metadata.reasons` lista os motivos por identificadores estáveis (por
+exemplo, `amount_requires_confirmation`); `no_risk_rules_triggered`
+explica uma aprovação sem alertas. Toda análise recebida, inclusive
+reprovada ou pendente de 2FA, é registrada. Um `id` já analisado não é
+processado novamente e retorna HTTP 409.
+
+## Contrato Pix
+
+Os dois endpoints exigem o cabeçalho `INTERNAL-TOKEN` herdado do Base
+Service. Os campos e objetos aninhados são validados por
+`src/schemas/post_pix_transaction.json`; datas devem incluir fuso
+horário. `geolocation` é opcional.
+
+```bash
+curl -X POST http://localhost:3000/pix/transaction \
+  -H "INTERNAL-TOKEN: default_token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "pix-000123",
+    "amount": 150000,
+    "transaction_date": "2026-10-17T22:15:00-03:00",
+    "source_account": {
+      "branch": "0001",
+      "account_number": "88213",
+      "opening_date": "2025-03-02T10:00:00-03:00",
+      "owner": {"document_number": "123.456.789-09"}
+    },
+    "destination_account": {
+      "participant": "60701190",
+      "branch": "3675",
+      "account_number": "10442",
+      "opening_date": "2026-10-10T09:00:00-03:00",
+      "owner": {"document_number": "987.654.321-00"}
+    },
+    "source": {
+      "device_id": "dvc-9f2c71a8",
+      "channel": "app",
+      "ip": "198.51.100.23",
+      "geolocation": {"latitude": -23.56, "longitude": -46.65}
+    }
+  }'
+```
+
+Resposta:
+
+```json
+{
+  "key": "b3f1c2e0-7d4a-4c1e-9a52-1f0e6c9d2a77",
+  "status": "two_factor_required",
+  "metadata": {"reasons": ["amount_requires_confirmation"]}
+}
+```
+
+Consulte a análise gravada usando o mesmo `id` enviado:
+
+```bash
+curl http://localhost:3000/pix/transaction/pix-000123 \
+  -H "INTERNAL-TOKEN: default_token"
+```
+
+## Como rodar e testar
+
+```bash
+docker compose up
+```
+
+Em outro terminal, instale as dependências de teste uma vez e execute a
+suíte com a API e o banco ativos:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements-dev.txt
+pytest
+```
+
+O banco cria as tabelas a partir de `database/database.sql` quando o
+volume é inicializado. Em um ambiente que já tenha o volume do Base
+Service, recrie o banco de desenvolvimento para aplicar a nova tabela
+Pix (isso apaga os dados locais desse banco).
+
+## Arquitetura
+
+O fluxo segue as camadas do Base Service, sem lógica antifraude no
+resource nem SQL no controller:
+
+`src/resources/pix_transaction.py` → `src/controllers/pix_transaction_controller.py` →
+`src/repositories/pix_transaction_repository.py` → model PostgreSQL →
+`src/dtos/pix_transaction_dto.py`.
+
+Os endpoints `/sample_entity` permanecem como exemplo original do Base
+Service; o escopo Pix é composto pelo POST e GET descritos acima.
+
+---
+
+## Base Service: instalação e rotas de exemplo
+
+As instruções a seguir mantêm os exemplos originais do projeto base.
 
 ---
 
@@ -91,7 +216,7 @@ cole um comando de cada vez.
 > 0. No PowerShell estes comandos não funcionam, porque lá `curl` é o
 > apelido de outro programa, com outra sintaxe.
 
-#### 1. Criar uma entidade
+#### 1. Criar uma entidade de exemplo do Base Service
 
 ```bash
 curl -X POST http://localhost:3000/sample_entity \
@@ -341,9 +466,9 @@ lições de segurança que cabem em cinco linhas.
 > quase só isso. Eles ganham o `x-request-id` como todo mundo — o que
 > não ganham é a linha de log.
 
-### Todas as rotas
+### Rotas do Base Service e do desafio
 
-Sete endereços — este é o mapa inteiro da API:
+Além das rotas Pix, os endereços de exemplo do Base Service continuam habilitados:
 
 | Método e rota | O que faz | Responde |
 |---|---|---|
@@ -354,6 +479,8 @@ Sete endereços — este é o mapa inteiro da API:
 | `GET /sample_entities` | lista, de dez em dez, com filtros | `200` + a página |
 | `PUT /sample_entity/{key}` | muda o status (`success` ou `failed`) | `202` + o `sample_entity_key` |
 | `PUT /webhook/sample_entity/{key}/increment_counter` | soma 1 no contador | `204`, sem corpo |
+| `POST /pix/transaction` | analisa e registra uma transação Pix | `200` + `key`, `status` e `metadata` |
+| `GET /pix/transaction/{id}` | consulta a análise gravada para o Pix | `200` + `key`, `status` e `metadata` |
 
 As cinco de baixo exigem o `INTERNAL-TOKEN` (seção 6). As duas de cima
 são abertas — a primeira você já usou: foi ela que respondeu no

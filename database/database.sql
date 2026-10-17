@@ -34,3 +34,21 @@ CREATE TABLE sample_entity_status_event(
     event_datetime                  TIMESTAMP NOT NULL,
     created_at                      TIMESTAMP NOT NULL DEFAULT(NOW())
 );
+
+CREATE TABLE pix_transaction(
+    id                              SERIAL PRIMARY KEY,
+    transaction_id                  VARCHAR(255) NOT NULL UNIQUE,
+    analysis_key                    CHAR(36) NOT NULL UNIQUE,
+    amount                          INTEGER NOT NULL,
+    transaction_date                TIMESTAMPTZ NOT NULL,
+    source_document_number          VARCHAR(18) NOT NULL,
+    destination_fingerprint         CHAR(64) NOT NULL,
+    device_id                       VARCHAR(255) NOT NULL,
+    status                          VARCHAR(32) NOT NULL,
+    transaction_data                JSONB NOT NULL,
+    metadata                        JSONB NOT NULL,
+    created_at                      TIMESTAMPTZ NOT NULL DEFAULT(NOW())
+);
+
+CREATE INDEX ix_pix_transaction_source_date_status
+    ON pix_transaction(source_document_number, transaction_date, status);

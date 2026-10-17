@@ -15,7 +15,8 @@ estiver perdido.
 ## 1. O caminho de uma requisição
 
 Toda requisição atravessa as mesmas camadas, sempre na mesma ordem.
-Este é o `POST /sample_entity`, que cria uma entidade:
+Este é o `POST /pix/transaction`, que analisa e registra um Pix. O
+`POST /sample_entity` permanece como exemplo original do Base Service:
 
 ```
   requisição chega
@@ -154,6 +155,8 @@ combinado inteiro.
 | **criar uma rota nova** numa entidade que já existe | `src/resources/sample_entity.py` | registrar o endereço em `src/app.py`, e o método no controller se a regra for nova |
 | **mudar uma regra** ("não pode X") | `src/controllers/sample_entity_controller.py` | e um erro novo em `src/errors/custom_errors.py`, se precisar |
 | **consultar o banco de outro jeito** (filtrar, ordenar, contar) | `src/repositories/sample_entity_repository.py` | o controller chama o método novo |
+| **mudar as regras antifraude Pix** | `src/controllers/pix_transaction_controller.py` | a consulta do histórico fica no `src/repositories/pix_transaction_repository.py` |
+| **mudar o contrato Pix** | `src/schemas/post_pix_transaction.json` | a persistência e o formato da resposta ficam no model e no DTO Pix |
 | **criar uma tabela** | `database/database.sql` | depois `src/models/` e o `__init__.py` da pasta |
 | **criar uma entidade inteira** (rota + regra + tabela) | um arquivo em cada pasta | `database.sql` → `models/` → `repositories/` → `controllers/` → `schemas/` → `resources/` → registrar em `src/app.py` |
 | **fazer algo em toda requisição** | `src/middlewares/` | registrar em `src/app.py` |

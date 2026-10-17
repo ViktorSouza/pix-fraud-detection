@@ -1,1 +1,2 @@
 from repositories.sample_entity_repository import SampleEntityRepository
+from repositories.pix_transaction_repository import PixTransactionRepository
