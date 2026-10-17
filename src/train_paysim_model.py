@@ -9,7 +9,7 @@ from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.metrics import average_precision_score, brier_score_loss, roc_auc_score
 from sklearn.model_selection import train_test_split
 
-from fraud_model import FEATURE_NAMES, MODEL_FORMAT_VERSION, paysim_features
+from fraud_model import LEGACY_FEATURE_NAMES, LEGACY_MODEL_FORMAT_VERSION, paysim_features
 
 
 def train_model(
@@ -74,8 +74,8 @@ def train_model(
         "test_fraud_rate": float(test_labels.mean()),
     }
     artifact = {
-        "format_version": MODEL_FORMAT_VERSION,
-        "feature_names": FEATURE_NAMES,
+        "format_version": LEGACY_MODEL_FORMAT_VERSION,
+        "feature_names": LEGACY_FEATURE_NAMES,
         "dataset": "PaySim1",
         "training_rows": int(len(data)),
         "training_fraud_rate": float(labels.mean()),

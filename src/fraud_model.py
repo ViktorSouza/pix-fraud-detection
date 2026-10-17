@@ -11,12 +11,24 @@ from sklearn.base import ClassifierMixin
 from errors.custom_errors import FraudModelUnavailable
 
 
-MODEL_FORMAT_VERSION = 1
-FEATURE_NAMES = (
+LEGACY_MODEL_FORMAT_VERSION = 1
+MODEL_FORMAT_VERSION = 2
+LEGACY_FEATURE_NAMES = (
     "amount_log_reais",
     "hour_sin",
     "hour_cos",
     "is_night",
+)
+FEATURE_NAMES = LEGACY_FEATURE_NAMES + (
+    "payer_account_age_days",
+    "prior_approved_count_24h",
+    "prior_approved_amount_log_reais",
+    "prior_approved_count_10m",
+    "has_prior_approved_history",
+    "is_new_destination",
+    "is_new_device",
+    "location_speed_kmh",
+    "has_location_velocity",
 )
 DEFAULT_MODEL_PATH = Path(__file__).resolve().parent / "artifacts" / "pix_fraud_model.joblib"
 
@@ -58,6 +70,47 @@ def paysim_features(steps: np.ndarray, amounts: np.ndarray) -> np.ndarray:
             ((hours >= 20) | (hours < 6)).astype(np.float64),
         )
     )
+
+
+def build_pix_model_features(
+    amount_cents: int,
+    transaction_date: datetime,
+    payer_account_age_days: float,
+    prior_approved_count_24h: int,
+    prior_approved_amount_cents: int,
+    prior_approved_count_10m: int,
+    destination_seen: bool,
+    device_seen: bool,
+    location_speed_kmh: float | None,
+) -> dict[str, float]:
+    base_features = pix_features(amount_cents, transaction_date)[0]
+    has_prior_history = prior_approved_count_24h > 0
+    values = {
+        "amount_log_reais": float(base_features[0]),
+        "hour_sin": float(base_features[1]),
+        "hour_cos": float(base_features[2]),
+        "is_night": float(base_features[3]),
+        "payer_account_age_days": float(payer_account_age_days),
+        "prior_approved_count_24h": float(prior_approved_count_24h),
+        "prior_approved_amount_log_reais": math.log1p(prior_approved_amount_cents / 100),
+        "prior_approved_count_10m": float(prior_approved_count_10m),
+        "has_prior_approved_history": float(has_prior_history),
+        "is_new_destination": float(has_prior_history and not destination_seen),
+        "is_new_device": float(has_prior_history and not device_seen),
+        "location_speed_kmh": float(location_speed_kmh or 0),
+        "has_location_velocity": float(location_speed_kmh is not None),
+    }
+    return values
+
+
+def pix_enriched_features(model_features: dict[str, float]) -> np.ndarray:
+    missing = set(FEATURE_NAMES) - model_features.keys()
+    if missing:
+        raise ValueError(f"Missing Pix model features: {', '.join(sorted(missing))}")
+    values = np.asarray([[model_features[name] for name in FEATURE_NAMES]], dtype=np.float64)
+    if not np.isfinite(values).all():
+        raise ValueError("Pix model features must all be finite numbers")
+    return values
 
 
 def decision_for_score(
@@ -116,9 +169,15 @@ def score_transaction(
     amount_cents: int,
     transaction_date: datetime,
     model_path: Path,
+    model_features: dict[str, float] | None = None,
 ) -> float:
     artifact = _load_artifact(str(model_path.resolve()))
-    features = pix_features(amount_cents, transaction_date)
+    if artifact["format_version"] == LEGACY_MODEL_FORMAT_VERSION:
+        features = pix_features(amount_cents, transaction_date)
+    else:
+        if model_features is None:
+            raise ValueError("The Pix-trained model requires server-derived transaction features")
+        features = pix_enriched_features(model_features)
     model = artifact["model"]
     classes = list(model.classes_)
     if 1 not in classes:
@@ -139,9 +198,13 @@ def _load_artifact(model_path: str) -> dict[str, Any]:
 
     if not isinstance(artifact, dict):
         raise ValueError("Fraud model artifact must be a dictionary")
-    if artifact.get("format_version") != MODEL_FORMAT_VERSION:
+    format_version = artifact.get("format_version")
+    if format_version not in {LEGACY_MODEL_FORMAT_VERSION, MODEL_FORMAT_VERSION}:
         raise ValueError("Unsupported fraud model artifact version")
-    if artifact.get("feature_names") != FEATURE_NAMES:
+    expected_features = (
+        LEGACY_FEATURE_NAMES if format_version == LEGACY_MODEL_FORMAT_VERSION else FEATURE_NAMES
+    )
+    if artifact.get("feature_names") != expected_features:
         raise ValueError("Fraud model feature schema does not match this service")
 
     model = artifact.get("model")
@@ -149,7 +212,7 @@ def _load_artifact(model_path: str) -> dict[str, Any]:
         not isinstance(model, ClassifierMixin)
         or not hasattr(model, "predict_proba")
         or not hasattr(model, "classes_")
-        or getattr(model, "n_features_in_", None) != len(FEATURE_NAMES)
+        or getattr(model, "n_features_in_", None) != len(expected_features)
     ):
         raise ValueError("Fraud model artifact has no compatible classifier")
     return artifact

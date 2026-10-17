@@ -5,6 +5,7 @@ from sqlalchemy.exc import IntegrityError
 
 from constants import (
     PIX_FRAUD_MODEL_PATH,
+    PIX_MAX_LOCATION_SPEED_KMH,
     PIX_REJECT_THRESHOLD,
     PIX_TWO_FACTOR_THRESHOLD,
 )
@@ -15,8 +16,9 @@ from errors import (
     InvalidPixTimestamp,
     NotFoundPixTransaction,
 )
-from fraud_model import combine_decisions, score_transaction
+from fraud_model import build_pix_model_features, combine_decisions, score_transaction
 from repositories import PixTransactionRepository
+from utils.geolocation import calculate_location_speed_kmh
 
 MAX_TRANSACTION_AMOUNT_CENTS = 500_000
 MAX_APPROVED_AMOUNT_PER_24_HOURS_CENTS = 300_000
@@ -42,12 +44,7 @@ class PixTransactionController(BaseController):
         source_account = transaction_data["source_account"]
         destination_account = transaction_data["destination_account"]
         source_document_number = source_account["owner"]["document_number"]
-        self._parse_timestamp(source_account["opening_date"])
-        fraud_score = score_transaction(
-            amount_cents=transaction_data["amount"],
-            transaction_date=transaction_date,
-            model_path=Path(PIX_FRAUD_MODEL_PATH),
-        )
+        source_account_opening_date = self._parse_timestamp(source_account["opening_date"])
         destination_fingerprint = self.pix_transaction_repository.fingerprint_destination(
             destination_account
         )
@@ -66,6 +63,7 @@ class PixTransactionController(BaseController):
 
         rejection_reasons = []
         two_factor_reasons = []
+        location_velocity = None
 
         if transaction_data["amount"] > MAX_TRANSACTION_AMOUNT_CENTS:
             rejection_reasons.append("amount_over_transaction_limit")
@@ -88,6 +86,54 @@ class PixTransactionController(BaseController):
         if previous_count and not device_seen:
             two_factor_reasons.append("new_device_for_payer")
 
+        current_location = transaction_data["source"].get("geolocation")
+        if current_location is not None:
+            previous_location = self.pix_transaction_repository.get_latest_approved_location(
+                source_document_number=source_document_number,
+                since=transaction_date - timedelta(hours=24),
+                transaction_date=transaction_date,
+            )
+            if previous_location is not None:
+                previous_date, previous_latitude, previous_longitude = previous_location
+                movement = calculate_location_speed_kmh(
+                    previous_latitude=previous_latitude,
+                    previous_longitude=previous_longitude,
+                    previous_date=previous_date,
+                    current_latitude=current_location["latitude"],
+                    current_longitude=current_location["longitude"],
+                    current_date=transaction_date,
+                )
+                if movement is not None:
+                    distance_km, speed_kmh = movement
+                    location_velocity = {
+                        "distance_km": round(distance_km, 2),
+                        "speed_kmh": round(speed_kmh, 2),
+                        "threshold_kmh": PIX_MAX_LOCATION_SPEED_KMH,
+                    }
+                    if speed_kmh > PIX_MAX_LOCATION_SPEED_KMH:
+                        two_factor_reasons.append("impossible_location_velocity")
+
+        model_features = build_pix_model_features(
+            amount_cents=transaction_data["amount"],
+            transaction_date=transaction_date,
+            payer_account_age_days=(
+                transaction_date - source_account_opening_date
+            ).total_seconds()
+            / 86400,
+            prior_approved_count_24h=previous_count,
+            prior_approved_amount_cents=previous_amount,
+            prior_approved_count_10m=velocity_count,
+            destination_seen=destination_seen,
+            device_seen=device_seen,
+            location_speed_kmh=location_velocity["speed_kmh"] if location_velocity else None,
+        )
+        fraud_score = score_transaction(
+            amount_cents=transaction_data["amount"],
+            transaction_date=transaction_date,
+            model_path=Path(PIX_FRAUD_MODEL_PATH),
+            model_features=model_features,
+        )
+
         status, decision_layer, model_reasons = combine_decisions(
             fraud_score=fraud_score,
             rejection_reasons=rejection_reasons,
@@ -105,7 +151,11 @@ class PixTransactionController(BaseController):
             "fraud_score": round(fraud_score, 6),
             "decision_layer": decision_layer,
             "triggered_rules": rejection_reasons + two_factor_reasons,
+            "model_features": model_features,
         }
+        if location_velocity is not None:
+            metadata["location_velocity"] = location_velocity
+
         pix_transaction = self.pix_transaction_repository.create(
             transaction_data=transaction_data,
             transaction_date=transaction_date,

@@ -5,6 +5,8 @@ import pandas as pd
 import pytest
 
 from fraud_model import (
+    FEATURE_NAMES,
+    build_pix_model_features,
     combine_decisions,
     decision_for_score,
     paysim_features,
@@ -13,6 +15,7 @@ from fraud_model import (
 )
 from errors.custom_errors import FraudModelUnavailable
 from train_paysim_model import train_model
+from train_pix_model import train_model as train_pix_model
 
 
 def test_pix_and_paysim_features_share_the_same_schema():
@@ -31,6 +34,26 @@ def test_pix_and_paysim_features_share_the_same_schema():
 def test_pix_features_reject_naive_timestamps():
     with pytest.raises(ValueError, match="must include a timezone"):
         pix_features(25_000, datetime(2026, 10, 17, 21))
+
+
+def test_build_pix_model_features_uses_server_derived_context():
+    features = build_pix_model_features(
+        amount_cents=20_000,
+        transaction_date=datetime(2026, 10, 17, 21, tzinfo=timezone.utc),
+        payer_account_age_days=365,
+        prior_approved_count_24h=3,
+        prior_approved_amount_cents=40_000,
+        prior_approved_count_10m=2,
+        destination_seen=False,
+        device_seen=True,
+        location_speed_kmh=3_500,
+    )
+
+    assert tuple(features) == FEATURE_NAMES
+    assert features["is_new_destination"] == 1
+    assert features["is_new_device"] == 0
+    assert features["has_location_velocity"] == 1
+    assert features["location_speed_kmh"] == 3_500
 
 
 @pytest.mark.parametrize(
@@ -123,5 +146,58 @@ def test_training_creates_a_loadable_model(tmp_path):
         25_000,
         datetime(2026, 10, 17, 21, tzinfo=timezone.utc),
         output_path,
+    )
+    assert 0 <= score <= 1
+
+
+def test_labeled_pix_trainer_accepts_server_derived_features(tmp_path):
+    dataset_path = tmp_path / "labeled_pix.csv"
+    output_path = tmp_path / "pix_model.joblib"
+    rows = []
+    for index in range(400):
+        is_fraud = int(index % 4 == 0)
+        row = {name: 0.0 for name in FEATURE_NAMES}
+        row.update(
+            {
+                "amount_log_reais": float(np.log1p(100 if is_fraud else 250)),
+                "hour_sin": float(np.sin(index)),
+                "hour_cos": float(np.cos(index)),
+                "payer_account_age_days": float(index % 365),
+                "prior_approved_count_24h": float(index % 5),
+                "prior_approved_amount_log_reais": float(np.log1p(index * 10)),
+                "prior_approved_count_10m": float(index % 3),
+                "has_prior_approved_history": float(index % 2),
+                "is_new_destination": float(is_fraud),
+                "is_new_device": float(is_fraud),
+                "location_speed_kmh": float(3500 if is_fraud else 0),
+                "has_location_velocity": float(is_fraud),
+                "is_fraud": is_fraud,
+            }
+        )
+        rows.append(row)
+    pd.DataFrame(rows).to_csv(dataset_path, index=False)
+
+    metrics = train_pix_model(dataset_path, output_path, random_state=42)
+
+    assert output_path.is_file()
+    assert metrics["test_rows"] == 80
+    assert metrics["low_value_fraud_rows"] > 0
+    assert metrics["low_value_recall_at_two_factor_threshold"] is not None
+    features = build_pix_model_features(
+        amount_cents=10_000,
+        transaction_date=datetime(2026, 10, 17, 21, tzinfo=timezone.utc),
+        payer_account_age_days=100,
+        prior_approved_count_24h=2,
+        prior_approved_amount_cents=20_000,
+        prior_approved_count_10m=1,
+        destination_seen=False,
+        device_seen=False,
+        location_speed_kmh=4_000,
+    )
+    score = score_transaction(
+        10_000,
+        datetime(2026, 10, 17, 21, tzinfo=timezone.utc),
+        output_path,
+        model_features=features,
     )
     assert 0 <= score <= 1

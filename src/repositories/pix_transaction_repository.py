@@ -2,7 +2,7 @@ from datetime import datetime
 from hashlib import sha256
 from uuid import uuid4
 
-from sqlalchemy import case, func
+from sqlalchemy import Float, case, func
 
 from database import Context
 from models import PixTransaction
@@ -58,6 +58,34 @@ class PixTransactionRepository:
 
         count, amount, velocity_count, destination_seen, device_seen = profile
         return count, amount, velocity_count, destination_seen, device_seen
+
+    def get_latest_approved_location(
+        self,
+        source_document_number: str,
+        since: datetime,
+        transaction_date: datetime,
+    ) -> tuple[datetime, float, float] | None:
+        latitude = PixTransaction.transaction_data["source"]["geolocation"]["latitude"].astext
+        longitude = PixTransaction.transaction_data["source"]["geolocation"]["longitude"].astext
+        location = (
+            self.session.query(
+                PixTransaction.transaction_date,
+                latitude.cast(Float),
+                longitude.cast(Float),
+            )
+            .filter(
+                PixTransaction.source_document_number == source_document_number,
+                PixTransaction.status == "approved",
+                PixTransaction.transaction_date >= since,
+                PixTransaction.transaction_date < transaction_date,
+            )
+            .order_by(PixTransaction.transaction_date.desc(), PixTransaction.id.desc())
+            .first()
+        )
+
+        if location is None or location[1] is None or location[2] is None:
+            return None
+        return location[0], float(location[1]), float(location[2])
 
     def create(
         self,

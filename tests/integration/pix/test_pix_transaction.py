@@ -34,6 +34,10 @@ class TestPixTransaction:
         assert status == 200
         assert set(response) == {"key", "status", "metadata"}
         self.assert_decision_matches_score(response)
+        features = response["metadata"]["model_features"]
+        assert features["prior_approved_count_24h"] == 0
+        assert features["has_prior_approved_history"] == 0
+        assert features["has_location_velocity"] == 0
 
         status, stored_analysis = RequestGenerator.GET_pix_transaction(payload["id"])
 
@@ -71,6 +75,34 @@ class TestPixTransaction:
         self.assert_decision_matches_score(response)
         assert response["status"] in {"two_factor_required", "rejected"}
         assert "destination_account_is_new" in response["metadata"]["reasons"]
+
+    def test_requires_two_factor_for_impossible_location_velocity(self):
+        now = datetime.now(timezone.utc)
+        baseline = PayloadGenerator.create_pix_transaction_payload(
+            amount=1_000,
+            transaction_date=now - timedelta(hours=2),
+        )
+        baseline["source"]["geolocation"] = {"latitude": 0, "longitude": 0}
+        status, baseline_response = RequestGenerator.POST_pix_transaction(baseline)
+        assert status == 200
+
+        if baseline_response["status"] != "approved":
+            pytest.skip("The configured model did not approve the location history transaction.")
+
+        current = PayloadGenerator.create_pix_transaction_payload(
+            transaction_date=now,
+            source_document_number=baseline["source_account"]["owner"]["document_number"],
+            destination_account_number=baseline["destination_account"]["account_number"],
+            device_id=baseline["source"]["device_id"],
+        )
+        current["source"]["geolocation"] = {"latitude": 0, "longitude": 60}
+        status, response = RequestGenerator.POST_pix_transaction(current)
+
+        assert status == 200
+        self.assert_decision_matches_score(response)
+        assert response["status"] in {"two_factor_required", "rejected"}
+        assert "impossible_location_velocity" in response["metadata"]["reasons"]
+        assert response["metadata"]["location_velocity"]["speed_kmh"] > 3000
 
     def test_rejects_amount_over_transaction_limit(self):
         payload = PayloadGenerator.create_pix_transaction_payload(amount=500_001)

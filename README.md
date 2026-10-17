@@ -51,14 +51,46 @@ primeiro até antes do segundo pedem 2FA; a partir do segundo rejeitam.
 Uma regra local de maior severidade prevalece. Os cortes são parâmetros
 acadêmicos configuráveis, não calibrados para risco financeiro real.
 
+A regra de localização usa `PIX_MAX_LOCATION_SPEED_KMH` (padrão `3000`).
+Ela calcula a distância pela fórmula de Haversine entre a geolocalização
+atual e a da transação aprovada anterior do mesmo pagador nas últimas 24h,
+dividida pelo tempo entre as transações. Acima do limite, pede 2FA e
+inclui `location_velocity` (distância, velocidade e limite) na metadata.
+Como `geolocation` é opcional, a regra não roda se qualquer uma das duas
+transações não tiver coordenadas. É um sinal experimental: GPS impreciso,
+spoofing ou localização compartilhada não são tratados.
+
 O classificador usa somente valor e hora (`amount`, `step`) porque são
-as únicas variáveis do PaySim compatíveis com o contrato atual. Portanto,
-ele **não** é um stacking treinado com scores de velocidade, perfil,
-contraparte ou grafo, e não é uma estimativa confiável da probabilidade
-de fraude em transações Pix. Para qualquer uso real, treine e valide um
-modelo com dados Pix rotulados e representativos antes de ativar a
-decisão automática. Carregue apenas artefatos confiáveis: arquivos
-Joblib podem executar código ao serem abertos.
+as únicas variáveis disponíveis no PaySim que correspondem ao payload
+atual. Para começar a preparar um modelo de Pix, a API também registra em
+`metadata.model_features` os sinais derivados no servidor: idade da conta,
+histórico aprovado em 24h/10min, novidade de destino/aparelho e velocidade
+geográfica quando observável. O artefato PaySim existente ignora esses
+sinais e continua sendo apenas um protótipo, não uma estimativa confiável
+de fraude Pix.
+
+Quando houver dados Pix rotulados, crie um CSV com as colunas de
+`metadata.model_features` — `amount_log_reais`, `hour_sin`, `hour_cos`,
+`is_night`, `payer_account_age_days`, `prior_approved_count_24h`,
+`prior_approved_amount_log_reais`, `prior_approved_count_10m`,
+`has_prior_approved_history`, `is_new_destination`, `is_new_device`,
+`location_speed_kmh` e `has_location_velocity` — e a coluna `is_fraud`
+(`0` ou `1` por transação). Treine o modelo enriquecido assim:
+
+```bash
+PYTHONPATH=src python -m train_pix_model \
+  --dataset /caminho/para/transacoes_pix_rotuladas.csv \
+  --output artifacts/pix_fraud_model.joblib
+```
+
+O treino avalia os dados em uma partição estratificada e informa métricas
+globais, além do recall no subconjunto de fraudes de até R$ 200 ao limiar
+de 2FA. Confira a quantidade de fraudes de baixo valor e essas métricas
+antes de usar o artefato: nenhuma mudança de features garante detectar
+fraudes que não estejam representadas nos dados rotulados. O artefato
+enriquecido é compatível com sinais calculados pela API; os modelos PaySim
+legados continuam carregáveis para demonstração. Carregue apenas artefatos
+confiáveis: arquivos Joblib podem executar código ao serem abertos.
 
 ## Regras
 
@@ -72,6 +104,7 @@ iniciais explícitos do time e podem ser recalibrados com dados reais.
 | Valor elevado | Pede 2FA a partir do limite, inclusive | R$ 1.000 (`100000` centavos) | Acrescenta confirmação proporcional ao impacto financeiro. |
 | Conta de destino recente | Pede 2FA se a conta recebedora tiver menos de 7 dias na data do Pix | 7 dias | Uma contraparte recém-aberta ainda tem pouco histórico observável. |
 | Velocidade | Pede 2FA quando já existem pelo menos 3 Pix aprovados do pagador nos 10 minutos anteriores | Janela móvel de 10 min; o atual é o 4º | Captura rajadas incompatíveis com o ritmo normal. |
+| Deslocamento impossível | Pede 2FA se a velocidade estimada entre a última geolocalização aprovada e a atual exceder o limite | Padrão: 3.000 km/h; histórico de 24h; requer coordenadas nas duas transações | Sinaliza posições incompatíveis com deslocamento físico plausível. |
 | Novo destino ou dispositivo | Para pagador com Pix aprovado nas últimas 24h, pede 2FA se o destino (ISPB, agência e conta) ou aparelho não aparece nesse perfil | Perfil de 24h | Usa a familiaridade da contraparte e do aparelho sem fricção no primeiro uso do cliente. |
 
 ## Como as regras viram decisão

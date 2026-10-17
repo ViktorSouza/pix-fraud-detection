@@ -1,4 +1,5 @@
 import os
+import math
 from pathlib import Path
 
 
@@ -34,6 +35,7 @@ PIX_FRAUD_MODEL_PATH = os.environ.get(
 )
 PIX_TWO_FACTOR_THRESHOLD = float(os.environ.get("PIX_TWO_FACTOR_THRESHOLD", "0.30"))
 PIX_REJECT_THRESHOLD = float(os.environ.get("PIX_REJECT_THRESHOLD", "0.70"))
+PIX_MAX_LOCATION_SPEED_KMH = float(os.environ.get("PIX_MAX_LOCATION_SPEED_KMH", "3000"))
 
 # Rotas públicas: não exigem o header INTERNAL-TOKEN. São as rotas que
 # precisam responder pra quem ainda não tem token nenhum: a raiz, que
@@ -54,6 +56,8 @@ def check_variables():
             "PIX_TWO_FACTOR_THRESHOLD e PIX_REJECT_THRESHOLD devem satisfazer "
             "0 < two-factor < rejection < 1."
         )
+    if not math.isfinite(PIX_MAX_LOCATION_SPEED_KMH) or PIX_MAX_LOCATION_SPEED_KMH <= 0:
+        raise EnvironmentError("PIX_MAX_LOCATION_SPEED_KMH deve ser um número positivo e finito.")
 
     missing = []
     for name in REQUIRED_VARIABLES:

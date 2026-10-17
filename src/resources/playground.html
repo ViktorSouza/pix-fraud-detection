@@ -354,6 +354,9 @@
               : ""}
           </div>
           ${hasScore ? `<div class="meter" role="img" aria-label="Score de fraude: ${percent}%"><div class="meter-fill ${barClass}" style="width:${percent}%"></div></div>` : ""}
+          ${metadata.location_velocity
+            ? `<p class="result-meta">Deslocamento estimado: ${escapeHtml(metadata.location_velocity.distance_km)} km em ${escapeHtml(metadata.location_velocity.speed_kmh)} km/h (limite: ${escapeHtml(metadata.location_velocity.threshold_kmh)} km/h)</p>`
+            : ""}
           <div class="reasons">${reasons.length
             ? reasons.map((reason) => `<span class="reason">${escapeHtml(reason)}</span>`).join("")
             : `<span class="result-meta">Sem motivos informados</span>`}</div>
