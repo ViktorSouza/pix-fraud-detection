@@ -13,13 +13,14 @@ payload recebido ficam persistidos; `GET /pix/transaction/{id}` recupera
 a decisão gravada. Não há consulta externa nem análise manual no caminho
 da decisão.
 
-O protótipo também calcula `metadata.fraud_score` (0 a 1) com um
-classificador supervisionado treinado no PaySim. O resultado do modelo
-define a decisão entre `approved`, `two_factor_required` e `rejected`,
-pelos cortes configurados abaixo; as regras determinísticas existentes
-continuam podendo escalar a decisão e os vetos de limite continuam
-rejeitando a transação. O modelo não vem no repositório: é preciso treinar
-e montar o artefato antes de enviar transações Pix.
+O motor calcula `metadata.fraud_score` (0 a 1) como um indicador de
+anomalia comportamental. Quando o pagador tem histórico aprovado
+suficiente, um Isolation Forest compara a transação atual com até 200
+transações anteriores daquela pessoa. Com pouco histórico individual,
+usa um perfil comportamental global das transações aprovadas; se ainda
+não houver dados globais suficientes, usa o classificador PaySim como
+fallback. Regras determinísticas continuam podendo escalar a decisão e
+os vetos de limite continuam rejeitando.
 
 ### Treinar e habilitar o modelo acadêmico
 
@@ -42,8 +43,10 @@ O treino usa até 1 milhão de linhas (amostra aleatória reprodutível por
 padrão), e imprime ROC AUC, average precision e Brier score em uma
 partição de teste estratificada. O serviço lê o arquivo montado em
 `/app/artifacts/pix_fraud_model.joblib`; ajuste `PIX_FRAUD_MODEL_PATH` se
-usar outro local. Sem artefato, `POST /pix/transaction` responde HTTP 503
-em vez de simular uma pontuação ou voltar silenciosamente às regras.
+usar outro local. O artefato PaySim é usado como fallback global quando
+ainda não há histórico aprovado suficiente no banco. Se não existir esse
+artefato nem histórico para treinar o perfil, `POST /pix/transaction`
+responde HTTP 503 em vez de simular uma pontuação.
 
 Os cortes iniciais são `PIX_TWO_FACTOR_THRESHOLD=0.30` e
 `PIX_REJECT_THRESHOLD=0.70`. Valores abaixo do primeiro aprovam; do
@@ -60,14 +63,28 @@ Como `geolocation` é opcional, a regra não roda se qualquer uma das duas
 transações não tiver coordenadas. É um sinal experimental: GPS impreciso,
 spoofing ou localização compartilhada não são tratados.
 
-O classificador usa somente valor e hora (`amount`, `step`) porque são
-as únicas variáveis disponíveis no PaySim que correspondem ao payload
-atual. Para começar a preparar um modelo de Pix, a API também registra em
-`metadata.model_features` os sinais derivados no servidor: idade da conta,
-histórico aprovado em 24h/10min, novidade de destino/aparelho e velocidade
-geográfica quando observável. O artefato PaySim existente ignora esses
-sinais e continua sendo apenas um protótipo, não uma estimativa confiável
-de fraude Pix.
+O modelo individual é não supervisionado: não prevê o recebedor nem
+precisa de rótulos de fraude para aprender o padrão do pagador. Ele usa
+valor, horário, velocidade estimada entre localizações conhecidas e
+novidade do aparelho. O destinatário é excluído do modelo individual;
+novidade de destino continua coberta por uma regra determinística. Só
+transações aprovadas entram no histórico. O perfil individual requer pelo
+menos 20 registros; antes disso, a API tenta usar até 200 transações
+aprovadas de outros pagadores (com mínimo de 20 no conjunto) como fallback
+global.
+
+`fraud_score` é um score de anomalia normalizado, não a probabilidade de
+fraude. Um valor alto quer dizer que a observação se afasta do padrão
+aprendido pelo modelo selecionado; pode ser uma atividade legítima
+atípica. Os limiares `PIX_TWO_FACTOR_THRESHOLD` e `PIX_REJECT_THRESHOLD`
+transformam esse score em 2FA/rejeição e devem ser calibrados para reduzir
+falsos positivos antes de qualquer uso real.
+
+A API registra em `metadata.model_features` os sinais derivados no
+servidor, úteis para treinamento supervisionado futuro. O classificador
+PaySim permanece somente como fallback global para cenários com pouco
+histórico; ele usa apenas valor e hora e é um protótipo sintético, não
+uma estimativa confiável de fraude Pix.
 
 Quando houver dados Pix rotulados, crie um CSV com as colunas de
 `metadata.model_features` — `amount_log_reais`, `hour_sin`, `hour_cos`,
@@ -165,12 +182,25 @@ Resposta:
   "status": "two_factor_required",
   "metadata": {
     "fraud_score": 0.42,
-    "decision_layer": "paysim_prototype_model",
+    "decision_layer": "payer_behavior_anomaly",
     "reasons": [
       "amount_requires_confirmation",
       "model_fraud_score_requires_confirmation"
     ],
-    "triggered_rules": ["amount_requires_confirmation"]
+    "triggered_rules": ["amount_requires_confirmation"],
+    "score_source": "payer_approved_history",
+    "behavior_model": {
+      "scope": "payer_behavior_anomaly",
+      "history_transactions": 42,
+      "feature_names": [
+        "amount_log_reais",
+        "hour_sin",
+        "hour_cos",
+        "travel_speed_log_kmh",
+        "has_location_velocity",
+        "is_new_device"
+      ]
+    }
   }
 }
 ```

@@ -136,6 +136,7 @@ def combine_decisions(
     two_factor_reasons: list[str],
     two_factor_threshold: float,
     reject_threshold: float,
+    model_layer: str = "global_classifier_fallback",
 ) -> tuple[str, str, list[str]]:
     model_status = decision_for_score(
         fraud_score,
@@ -161,7 +162,7 @@ def combine_decisions(
     elif two_factor_reasons and model_status == "approved":
         decision_layer = "level_4_rules"
     else:
-        decision_layer = "paysim_prototype_model"
+        decision_layer = model_layer
     return status, decision_layer, model_reasons
 
 

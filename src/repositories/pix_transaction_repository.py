@@ -8,6 +8,9 @@ from database import Context
 from models import PixTransaction
 
 
+BEHAVIOR_HISTORY_LIMIT = 200
+
+
 class PixTransactionRepository:
     def __init__(self, context: Context) -> None:
         self.session = context.db_session
@@ -86,6 +89,74 @@ class PixTransactionRepository:
         if location is None or location[1] is None or location[2] is None:
             return None
         return location[0], float(location[1]), float(location[2])
+
+    def get_approved_behavior_history(
+        self,
+        source_document_number: str,
+        transaction_date: datetime,
+    ) -> list[tuple[int, datetime, str, float | None, float | None]]:
+        return self._get_approved_behavior_rows(
+            source_document_number=source_document_number,
+            transaction_date=transaction_date,
+        )
+
+    def get_global_approved_behavior_history(
+        self,
+        transaction_date: datetime,
+        limit: int = BEHAVIOR_HISTORY_LIMIT,
+    ) -> list[tuple[str, int, datetime, str, float | None, float | None]]:
+        latitude = PixTransaction.transaction_data["source"]["geolocation"]["latitude"].astext
+        longitude = PixTransaction.transaction_data["source"]["geolocation"]["longitude"].astext
+        rows = (
+            self.session.query(
+                PixTransaction.source_document_number,
+                PixTransaction.amount,
+                PixTransaction.transaction_date,
+                PixTransaction.device_id,
+                latitude.cast(Float),
+                longitude.cast(Float),
+            )
+            .filter(
+                PixTransaction.status == "approved",
+                PixTransaction.transaction_date < transaction_date,
+            )
+            .order_by(PixTransaction.transaction_date.desc(), PixTransaction.id.desc())
+            .limit(limit)
+            .all()
+        )
+        return [
+            (payer, amount, date, device, lat, lon)
+            for payer, amount, date, device, lat, lon in reversed(rows)
+        ]
+
+    def _get_approved_behavior_rows(
+        self,
+        source_document_number: str,
+        transaction_date: datetime,
+    ) -> list[tuple[int, datetime, str, float | None, float | None]]:
+        latitude = PixTransaction.transaction_data["source"]["geolocation"]["latitude"].astext
+        longitude = PixTransaction.transaction_data["source"]["geolocation"]["longitude"].astext
+        rows = (
+            self.session.query(
+                PixTransaction.amount,
+                PixTransaction.transaction_date,
+                PixTransaction.device_id,
+                latitude.cast(Float),
+                longitude.cast(Float),
+            )
+            .filter(
+                PixTransaction.source_document_number == source_document_number,
+                PixTransaction.status == "approved",
+                PixTransaction.transaction_date < transaction_date,
+            )
+            .order_by(PixTransaction.transaction_date.desc(), PixTransaction.id.desc())
+            .limit(BEHAVIOR_HISTORY_LIMIT)
+            .all()
+        )
+        return [
+            (amount, date, device, lat, lon)
+            for amount, date, device, lat, lon in reversed(rows)
+        ]
 
     def create(
         self,

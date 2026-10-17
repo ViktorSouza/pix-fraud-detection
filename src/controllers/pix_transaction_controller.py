@@ -9,6 +9,12 @@ from constants import (
     PIX_REJECT_THRESHOLD,
     PIX_TWO_FACTOR_THRESHOLD,
 )
+from behavior_model import (
+    ANOMALY_FEATURE_NAMES,
+    BehaviorObservation,
+    score_global_behavior,
+    score_payer_behavior,
+)
 from controllers.base_controller import BaseController
 from dtos import PixTransactionDTO
 from errors import (
@@ -127,12 +133,70 @@ class PixTransactionController(BaseController):
             device_seen=device_seen,
             location_speed_kmh=location_velocity["speed_kmh"] if location_velocity else None,
         )
-        fraud_score = score_transaction(
+        current_location = transaction_data["source"].get("geolocation") or {}
+        current_observation = BehaviorObservation(
             amount_cents=transaction_data["amount"],
             transaction_date=transaction_date,
-            model_path=Path(PIX_FRAUD_MODEL_PATH),
-            model_features=model_features,
+            device_id=device_id,
+            latitude=current_location.get("latitude"),
+            longitude=current_location.get("longitude"),
         )
+        behavior_history = [
+            BehaviorObservation(
+                amount_cents=amount,
+                transaction_date=date,
+                device_id=historical_device_id,
+                latitude=latitude,
+                longitude=longitude,
+            )
+            for amount, date, historical_device_id, latitude, longitude
+            in self.pix_transaction_repository.get_approved_behavior_history(
+                source_document_number=source_document_number,
+                transaction_date=transaction_date,
+            )
+        ]
+        fraud_score = score_payer_behavior(behavior_history, current_observation)
+        if fraud_score is not None:
+            model_layer = "payer_behavior_anomaly"
+            score_source = "payer_approved_history"
+            model_history_count = len(behavior_history)
+        else:
+            global_history = self.pix_transaction_repository.get_global_approved_behavior_history(
+                transaction_date=transaction_date,
+            )
+            global_observations = [
+                (
+                    payer,
+                    BehaviorObservation(
+                        amount_cents=amount,
+                        transaction_date=date,
+                        device_id=historical_device_id,
+                        latitude=latitude,
+                        longitude=longitude,
+                    ),
+                )
+                for payer, amount, date, historical_device_id, latitude, longitude
+                in global_history
+            ]
+            fraud_score = score_global_behavior(
+                global_observations,
+                current_payer=source_document_number,
+                current=current_observation,
+            )
+            if fraud_score is not None:
+                model_layer = "global_behavior_anomaly"
+                score_source = "global_approved_history"
+                model_history_count = len(global_history)
+            else:
+                fraud_score = score_transaction(
+                    amount_cents=transaction_data["amount"],
+                    transaction_date=transaction_date,
+                    model_path=Path(PIX_FRAUD_MODEL_PATH),
+                    model_features=model_features,
+                )
+                model_layer = "global_classifier_fallback"
+                score_source = "paysim_or_labeled_global_model"
+                model_history_count = 0
 
         status, decision_layer, model_reasons = combine_decisions(
             fraud_score=fraud_score,
@@ -140,6 +204,7 @@ class PixTransactionController(BaseController):
             two_factor_reasons=two_factor_reasons,
             two_factor_threshold=PIX_TWO_FACTOR_THRESHOLD,
             reject_threshold=PIX_REJECT_THRESHOLD,
+            model_layer=model_layer,
         )
 
         reasons = rejection_reasons + two_factor_reasons + model_reasons
@@ -152,6 +217,12 @@ class PixTransactionController(BaseController):
             "decision_layer": decision_layer,
             "triggered_rules": rejection_reasons + two_factor_reasons,
             "model_features": model_features,
+            "score_source": score_source,
+            "behavior_model": {
+                "scope": model_layer,
+                "history_transactions": model_history_count,
+                "feature_names": list(ANOMALY_FEATURE_NAMES),
+            },
         }
         if location_velocity is not None:
             metadata["location_velocity"] = location_velocity

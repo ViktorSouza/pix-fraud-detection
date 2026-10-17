@@ -95,7 +95,7 @@ def test_model_rejection_can_escalate_a_transaction():
     )
 
     assert status == "rejected"
-    assert layer == "paysim_prototype_model"
+    assert layer == "global_classifier_fallback"
     assert model_reasons == ["model_fraud_score_over_rejection_threshold"]
 
 

@@ -167,7 +167,7 @@
               </div>
             </div>
             <p class="hint">Para simular familiaridade, use o perfil, aparelho e destino fixos. A primeira transação precisa ser aprovada para servir de histórico; análises de 2FA ou rejeitadas não criam esse histórico.</p>
-            <p class="hint">“Mudar endereço” troca latitude e longitude no payload. A localização ainda não participa das regras nem do score do modelo.</p>
+            <p class="hint">“Mudar endereço” troca latitude e longitude no payload. A localização participa da velocidade estimada no perfil comportamental quando há histórico geográfico.</p>
           </div>
           <label for="payload">Payload JSON</label>
           <textarea id="payload" spellcheck="false" aria-describedby="payload-hint"></textarea>
@@ -195,7 +195,7 @@
           </section>
         </div>
       </div>
-      <footer>O score do modelo PaySim é apenas demonstrativo, não calibrado para decisões financeiras reais.</footer>
+      <footer>O score é um indicador de anomalia comportamental, não uma probabilidade calibrada de fraude.</footer>
     </main>
 
     <script>
@@ -341,6 +341,12 @@
         const status = typeof data.status === "string" ? data.status : "indisponível";
         const reasons = Array.isArray(metadata.reasons) ? metadata.reasons : [];
         const barClass = score >= 0.7 ? "high" : score >= 0.3 ? "medium" : "";
+        const scoreSourceLabels = {
+          payer_approved_history: "histórico do pagador",
+          global_approved_history: "padrão global",
+          paysim_or_labeled_global_model: "classificador global"
+        };
+        const scoreSource = scoreSourceLabels[metadata.score_source] || metadata.score_source;
         result.innerHTML = `
           <div class="result-top">
             <div>
@@ -357,6 +363,7 @@
           ${metadata.location_velocity
             ? `<p class="result-meta">Deslocamento estimado: ${escapeHtml(metadata.location_velocity.distance_km)} km em ${escapeHtml(metadata.location_velocity.speed_kmh)} km/h (limite: ${escapeHtml(metadata.location_velocity.threshold_kmh)} km/h)</p>`
             : ""}
+          ${scoreSource ? `<p class="result-meta">Score baseado em: ${escapeHtml(scoreSource)}${Number.isFinite(metadata.behavior_model?.history_transactions) ? ` (${metadata.behavior_model.history_transactions} transações)` : ""}</p>` : ""}
           <div class="reasons">${reasons.length
             ? reasons.map((reason) => `<span class="reason">${escapeHtml(reason)}</span>`).join("")
             : `<span class="result-meta">Sem motivos informados</span>`}</div>

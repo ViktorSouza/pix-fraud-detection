@@ -14,7 +14,9 @@ class TestPixTransaction:
         assert metadata["decision_layer"] in {
             "level_2_hard_rule",
             "level_4_rules",
-            "paysim_prototype_model",
+            "payer_behavior_anomaly",
+            "global_behavior_anomaly",
+            "global_classifier_fallback",
         }
 
         if score >= 0.70 or metadata["decision_layer"] == "level_2_hard_rule":
@@ -38,6 +40,11 @@ class TestPixTransaction:
         assert features["prior_approved_count_24h"] == 0
         assert features["has_prior_approved_history"] == 0
         assert features["has_location_velocity"] == 0
+        assert response["metadata"]["score_source"] in {
+            "payer_approved_history",
+            "global_approved_history",
+            "paysim_or_labeled_global_model",
+        }
 
         status, stored_analysis = RequestGenerator.GET_pix_transaction(payload["id"])
 
