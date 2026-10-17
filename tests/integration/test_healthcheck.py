@@ -31,6 +31,7 @@ class TestHealthCheck:
         assert b"Pix Fraud Playground" in response.response_content
         assert b'for="example-payer"' in response.response_content
         assert b'for="example-device"' in response.response_content
+        assert b'for="example-location"' in response.response_content
         assert b'for="example-destination"' in response.response_content
         assert b'for="example-amount"' in response.response_content
 

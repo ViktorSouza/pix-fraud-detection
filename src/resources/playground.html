@@ -145,6 +145,13 @@
                 </select>
               </div>
               <div>
+                <label for="example-location">Localização</label>
+                <select id="example-location">
+                  <option value="same">Manter endereço atual</option>
+                  <option value="new">Mudar endereço</option>
+                </select>
+              </div>
+              <div>
                 <label for="example-destination">Conta de destino</label>
                 <select id="example-destination">
                   <option value="known">Destino conhecido</option>
@@ -160,6 +167,7 @@
               </div>
             </div>
             <p class="hint">Para simular familiaridade, use o perfil, aparelho e destino fixos. A primeira transação precisa ser aprovada para servir de histórico; análises de 2FA ou rejeitadas não criam esse histórico.</p>
+            <p class="hint">“Mudar endereço” troca latitude e longitude no payload. A localização ainda não participa das regras nem do score do modelo.</p>
           </div>
           <label for="payload">Payload JSON</label>
           <textarea id="payload" spellcheck="false" aria-describedby="payload-hint"></textarea>
@@ -209,6 +217,7 @@
         const date = (daysAgo) => new Date(now.getTime() - daysAgo * 86400000).toISOString();
         const isNewPayer = document.querySelector("#example-payer").value === "new";
         const isNewDevice = document.querySelector("#example-device").value === "new";
+        const isNewLocation = document.querySelector("#example-location").value === "new";
         const isNewDestination = document.querySelector("#example-destination").value === "new";
         const isRecentDestination = document.querySelector("#example-destination-age").value === "new";
         const amount = Number(document.querySelector("#example-amount").value);
@@ -241,7 +250,9 @@
             device_id: isNewDevice ? `dvc-${crypto.randomUUID()}` : "playground-known-device",
             channel: "app",
             ip: "198.51.100.23",
-            geolocation: { latitude: -23.56, longitude: -46.65 }
+            geolocation: isNewLocation
+              ? { latitude: -22.9068, longitude: -43.1729 }
+              : { latitude: -23.56, longitude: -46.65 }
           }
         };
       }
