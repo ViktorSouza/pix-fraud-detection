@@ -39,7 +39,7 @@ CREATE TABLE pix_transaction(
     id                              SERIAL PRIMARY KEY,
     transaction_id                  VARCHAR(255) NOT NULL UNIQUE,
     analysis_key                    CHAR(36) NOT NULL UNIQUE,
-    amount                          INTEGER NOT NULL,
+    amount                          BIGINT NOT NULL,
     transaction_date                TIMESTAMPTZ NOT NULL,
     source_document_number          VARCHAR(18) NOT NULL,
     destination_fingerprint         CHAR(64) NOT NULL,

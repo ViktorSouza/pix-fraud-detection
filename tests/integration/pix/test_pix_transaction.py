@@ -81,6 +81,20 @@ class TestPixTransaction:
         assert response["status"] == "rejected"
         assert "amount_over_transaction_limit" in response["metadata"]["reasons"]
 
+    def test_persists_large_rejected_amounts_that_fit_postgres_bigint(self):
+        payload = PayloadGenerator.create_pix_transaction_payload(amount=25_000_000_000)
+
+        status, response = RequestGenerator.POST_pix_transaction(payload)
+
+        assert status == 200
+        assert response["status"] == "rejected"
+        assert "amount_over_transaction_limit" in response["metadata"]["reasons"]
+
+        status, stored_analysis = RequestGenerator.GET_pix_transaction(payload["id"])
+
+        assert status == 200
+        assert stored_analysis == response
+
     def test_rejects_amount_over_24_hour_limit(self):
         now = datetime.now(timezone.utc)
         payer = PayloadGenerator.create_pix_transaction_payload()

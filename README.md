@@ -157,7 +157,11 @@ docker compose up
 
 Com a API no ar, abra [http://localhost:3000/playground](http://localhost:3000/playground)
 para usar a interface local: informe o `INTERNAL-TOKEN`, edite ou envie um
-payload de exemplo, veja o score e consulte análises existentes pelo ID.
+payload de exemplo, escolha valor, pagador, aparelho, destino e idade da
+conta recebedora, veja o score e consulte análises existentes pelo ID. O
+perfil de teste fixo usa os mesmos identificadores a cada exemplo; envie
+primeiro uma transação aprovada e, nas seguintes, o banco poderá reconhecer
+o aparelho e o destino usados nesse histórico recente.
 O token fica somente na memória da página; a lista de IDs recentes é salva
 no armazenamento local deste navegador.
 
@@ -175,6 +179,14 @@ O banco cria as tabelas a partir de `database/database.sql` quando o
 volume é inicializado. Em um ambiente que já tenha o volume do Base
 Service, recrie o banco de desenvolvimento para aplicar a nova tabela
 Pix (isso apaga os dados locais desse banco).
+
+Se a tabela Pix já existir, aplique a migração de `INTEGER` para `BIGINT`
+sem apagar os dados existentes:
+
+```bash
+docker compose exec -T db psql -U bootcamp -d bootcamp \
+  -c "ALTER TABLE pix_transaction ALTER COLUMN amount TYPE BIGINT"
+```
 
 ## Arquitetura
 

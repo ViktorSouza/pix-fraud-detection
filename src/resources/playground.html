@@ -41,9 +41,13 @@
       .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 22px; box-shadow: 0 12px 36px #07101d33; }
       .card + .card { margin-top: 18px; }
       .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+      .generator { margin: 18px 0; border: 1px solid var(--border); border-radius: 11px; background: #111c2e80; padding: 14px; }
+      .generator-title { margin: 0 0 12px; color: #dbe3f0; font-size: 13px; font-weight: 700; }
+      .generator-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
       label { display: block; margin-bottom: 7px; color: #c6d0e0; font-size: 13px; font-weight: 600; }
-      input, textarea { width: 100%; border: 1px solid var(--border); border-radius: 9px; background: #111c2e; color: #e8edf7; padding: 11px 12px; outline: none; }
+      input, textarea, select { width: 100%; border: 1px solid var(--border); border-radius: 9px; background: #111c2e; color: #e8edf7; padding: 11px 12px; outline: none; }
       input:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px #8b9cff22; }
+      select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px #8b9cff22; }
       input::placeholder { color: #68788f; }
       textarea { min-height: 330px; resize: vertical; font: 12px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; tab-size: 2; }
       .hint { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
@@ -119,6 +123,44 @@
               </div>
             </div>
           </div>
+          <div class="generator">
+            <p class="generator-title">Configurar exemplo</p>
+            <div class="generator-grid">
+              <div>
+                <label for="example-amount">Valor (centavos)</label>
+                <input id="example-amount" type="number" min="1" step="1" value="25000">
+              </div>
+              <div>
+                <label for="example-payer">Pagador</label>
+                <select id="example-payer">
+                  <option value="known">Perfil de teste fixo</option>
+                  <option value="new">Novo pagador</option>
+                </select>
+              </div>
+              <div>
+                <label for="example-device">Aparelho</label>
+                <select id="example-device">
+                  <option value="known">Aparelho conhecido</option>
+                  <option value="new">Novo aparelho</option>
+                </select>
+              </div>
+              <div>
+                <label for="example-destination">Conta de destino</label>
+                <select id="example-destination">
+                  <option value="known">Destino conhecido</option>
+                  <option value="new">Novo destino</option>
+                </select>
+              </div>
+              <div>
+                <label for="example-destination-age">Idade da conta de destino</label>
+                <select id="example-destination-age">
+                  <option value="old">Antiga (mais de 7 dias)</option>
+                  <option value="new">Recente (menos de 7 dias)</option>
+                </select>
+              </div>
+            </div>
+            <p class="hint">Para simular familiaridade, use o perfil, aparelho e destino fixos. A primeira transação precisa ser aprovada para servir de histórico; análises de 2FA ou rejeitadas não criam esse histórico.</p>
+          </div>
           <label for="payload">Payload JSON</label>
           <textarea id="payload" spellcheck="false" aria-describedby="payload-hint"></textarea>
           <p class="hint" id="payload-hint">Edite o JSON livremente. Valores monetários são enviados em centavos.</p>
@@ -157,28 +199,46 @@
       const sendButton = document.querySelector("#send-button");
       const lookupButton = document.querySelector("#lookup-button");
 
+      function randomCpfLikeDocument() {
+        const digits = String(crypto.getRandomValues(new Uint32Array(1))[0] % 100000000000).padStart(11, "0");
+        return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+      }
+
       function createExample() {
         const now = new Date();
         const date = (daysAgo) => new Date(now.getTime() - daysAgo * 86400000).toISOString();
+        const isNewPayer = document.querySelector("#example-payer").value === "new";
+        const isNewDevice = document.querySelector("#example-device").value === "new";
+        const isNewDestination = document.querySelector("#example-destination").value === "new";
+        const isRecentDestination = document.querySelector("#example-destination-age").value === "new";
+        const amount = Number(document.querySelector("#example-amount").value);
+        if (!Number.isSafeInteger(amount) || amount < 1) {
+          throw new Error("Informe um valor inteiro positivo em centavos.");
+        }
+
         return {
           id: `pix-${crypto.randomUUID()}`,
-          amount: 25000,
+          amount,
           transaction_date: now.toISOString(),
           source_account: {
             branch: "0001",
             account_number: "88213",
             opening_date: date(365),
-            owner: { document_number: "123.456.789-09" }
+            owner: {
+              document_number: isNewPayer ? randomCpfLikeDocument() : "159.357.246-80"
+            }
           },
           destination_account: {
             participant: "60701190",
             branch: "3675",
-            account_number: crypto.randomUUID().replaceAll("-", "").slice(0, 12),
-            opening_date: date(365),
+            account_number: isNewDestination
+              ? crypto.randomUUID().replaceAll("-", "").slice(0, 12)
+              : "playground-known-account",
+            opening_date: date(isRecentDestination ? 1 : 365),
             owner: { document_number: "987.654.321-00" }
           },
           source: {
-            device_id: `dvc-${crypto.randomUUID()}`,
+            device_id: isNewDevice ? `dvc-${crypto.randomUUID()}` : "playground-known-device",
             channel: "app",
             ip: "198.51.100.23",
             geolocation: { latitude: -23.56, longitude: -46.65 }
@@ -372,8 +432,12 @@
       }
 
       document.querySelector("#example-button").addEventListener("click", () => {
-        payloadInput.value = JSON.stringify(createExample(), null, 2);
-        clearError();
+        try {
+          payloadInput.value = JSON.stringify(createExample(), null, 2);
+          clearError();
+        } catch (error) {
+          showError(error.message);
+        }
       });
       sendButton.addEventListener("click", submitTransaction);
       lookupButton.addEventListener("click", () => lookupAnalysis());

@@ -29,6 +29,10 @@ class TestHealthCheck:
         assert response.response_status == 200
         assert response.response.headers["content-type"].startswith("text/html")
         assert b"Pix Fraud Playground" in response.response_content
+        assert b'for="example-payer"' in response.response_content
+        assert b'for="example-device"' in response.response_content
+        assert b'for="example-destination"' in response.response_content
+        assert b'for="example-amount"' in response.response_content
 
     def test_no_token(self):
         response = ClientRequisition.send("PUT", "/sample")

@@ -1,4 +1,4 @@
-from sqlalchemy import CHAR, Column, DateTime, Index, Integer, String, UniqueConstraint, func
+from sqlalchemy import BigInteger, CHAR, Column, DateTime, Index, Integer, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB
 
 from models.base import Base
@@ -10,7 +10,7 @@ class PixTransaction(Base):
     id = Column(Integer, primary_key=True)
     transaction_id = Column(String(255), nullable=False)
     analysis_key = Column(CHAR(36), nullable=False)
-    amount = Column(Integer, nullable=False)
+    amount = Column(BigInteger, nullable=False)
     transaction_date = Column(DateTime(timezone=True), nullable=False)
     source_document_number = Column(String(18), nullable=False)
     destination_fingerprint = Column(CHAR(64), nullable=False)
