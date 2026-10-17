@@ -42,10 +42,14 @@ services:
       BANKSLIP_API_URL: ${BANKSLIP_API_URL:-http://localhost:8080}
       BANKSLIP_API_INTERNAL_TOKEN: ${BANKSLIP_API_INTERNAL_TOKEN:-default_token}
       BANKSLIP_API_TIMEOUT: ${BANKSLIP_API_TIMEOUT:-5}
+      PIX_FRAUD_MODEL_PATH: ${PIX_FRAUD_MODEL_PATH:-/app/artifacts/pix_fraud_model.joblib}
+      PIX_TWO_FACTOR_THRESHOLD: ${PIX_TWO_FACTOR_THRESHOLD:-0.30}
+      PIX_REJECT_THRESHOLD: ${PIX_REJECT_THRESHOLD:-0.70}
     volumes:
       # Monta o codigo pra dentro do container: salvou o arquivo,
       # a API recarrega sozinha (o --reload ali embaixo).
       - ./src:/app
+      - ./artifacts:/app/artifacts:ro
     # --reload: salvou o arquivo, a API reinicia sozinha.
     command: uvicorn app:app --host 0.0.0.0 --port 3000 --no-server-header --reload
     healthcheck:
@@ -77,4 +81,3 @@ services:
       interval: 3s
       timeout: 3s
       retries: 20
-

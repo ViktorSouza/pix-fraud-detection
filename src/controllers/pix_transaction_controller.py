@@ -1,7 +1,13 @@
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from sqlalchemy.exc import IntegrityError
 
+from constants import (
+    PIX_FRAUD_MODEL_PATH,
+    PIX_REJECT_THRESHOLD,
+    PIX_TWO_FACTOR_THRESHOLD,
+)
 from controllers.base_controller import BaseController
 from dtos import PixTransactionDTO
 from errors import (
@@ -9,6 +15,7 @@ from errors import (
     InvalidPixTimestamp,
     NotFoundPixTransaction,
 )
+from fraud_model import combine_decisions, score_transaction
 from repositories import PixTransactionRepository
 
 MAX_TRANSACTION_AMOUNT_CENTS = 500_000
@@ -36,6 +43,11 @@ class PixTransactionController(BaseController):
         destination_account = transaction_data["destination_account"]
         source_document_number = source_account["owner"]["document_number"]
         self._parse_timestamp(source_account["opening_date"])
+        fraud_score = score_transaction(
+            amount_cents=transaction_data["amount"],
+            transaction_date=transaction_date,
+            model_path=Path(PIX_FRAUD_MODEL_PATH),
+        )
         destination_fingerprint = self.pix_transaction_repository.fingerprint_destination(
             destination_account
         )
@@ -76,19 +88,23 @@ class PixTransactionController(BaseController):
         if previous_count and not device_seen:
             two_factor_reasons.append("new_device_for_payer")
 
-        if rejection_reasons:
-            status = "rejected"
-        elif two_factor_reasons:
-            status = "two_factor_required"
-        else:
-            status = "approved"
+        status, decision_layer, model_reasons = combine_decisions(
+            fraud_score=fraud_score,
+            rejection_reasons=rejection_reasons,
+            two_factor_reasons=two_factor_reasons,
+            two_factor_threshold=PIX_TWO_FACTOR_THRESHOLD,
+            reject_threshold=PIX_REJECT_THRESHOLD,
+        )
 
-        reasons = rejection_reasons + two_factor_reasons
+        reasons = rejection_reasons + two_factor_reasons + model_reasons
         if not reasons:
             reasons.append("no_risk_rules_triggered")
 
         metadata = {
             "reasons": reasons,
+            "fraud_score": round(fraud_score, 6),
+            "decision_layer": decision_layer,
+            "triggered_rules": rejection_reasons + two_factor_reasons,
         }
         pix_transaction = self.pix_transaction_repository.create(
             transaction_data=transaction_data,

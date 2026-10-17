@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 
 SERVICE_ROOT = os.path.abspath(os.path.dirname(__file__))
@@ -27,6 +28,13 @@ BANKSLIP_API_INTERNAL_TOKEN = os.environ.get("BANKSLIP_API_INTERNAL_TOKEN", "def
 # src/connectors/rest_connector.py.
 BANKSLIP_API_TIMEOUT = int(os.environ.get("BANKSLIP_API_TIMEOUT", "5"))
 
+PIX_FRAUD_MODEL_PATH = os.environ.get(
+    "PIX_FRAUD_MODEL_PATH",
+    str(Path(SERVICE_ROOT) / "artifacts" / "pix_fraud_model.joblib"),
+)
+PIX_TWO_FACTOR_THRESHOLD = float(os.environ.get("PIX_TWO_FACTOR_THRESHOLD", "0.30"))
+PIX_REJECT_THRESHOLD = float(os.environ.get("PIX_REJECT_THRESHOLD", "0.70"))
+
 # Rotas públicas: não exigem o header INTERNAL-TOKEN. São as duas que
 # precisam responder pra quem ainda não tem token nenhum: a raiz, que
 # diz quem é este serviço, e o health check, que o Docker consulta pra
@@ -40,6 +48,12 @@ REQUIRED_VARIABLES = ["DATABASE_URL", "INTERNAL_TOKEN"]
 
 
 def check_variables():
+    if not 0 < PIX_TWO_FACTOR_THRESHOLD < PIX_REJECT_THRESHOLD < 1:
+        raise EnvironmentError(
+            "PIX_TWO_FACTOR_THRESHOLD e PIX_REJECT_THRESHOLD devem satisfazer "
+            "0 < two-factor < rejection < 1."
+        )
+
     missing = []
     for name in REQUIRED_VARIABLES:
         if not globals().get(name):

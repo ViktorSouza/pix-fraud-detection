@@ -13,6 +13,53 @@ payload recebido ficam persistidos; `GET /pix/transaction/{id}` recupera
 a decisão gravada. Não há consulta externa nem análise manual no caminho
 da decisão.
 
+O protótipo também calcula `metadata.fraud_score` (0 a 1) com um
+classificador supervisionado treinado no PaySim. O resultado do modelo
+define a decisão entre `approved`, `two_factor_required` e `rejected`,
+pelos cortes configurados abaixo; as regras determinísticas existentes
+continuam podendo escalar a decisão e os vetos de limite continuam
+rejeitando a transação. O modelo não vem no repositório: é preciso treinar
+e montar o artefato antes de enviar transações Pix.
+
+### Treinar e habilitar o modelo acadêmico
+
+Baixe o CSV do [PaySim1 no Kaggle](https://www.kaggle.com/datasets/ealaxi/paysim1)
+(arquivo `PS_20174392719_1491204439457_log.csv`) e instale as dependências
+da aplicação. O arquivo contém dados sintéticos de dinheiro móvel; não
+inclua o CSV nem o artefato treinado no Git.
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements-dev.txt
+PYTHONPATH=src python -m train_paysim_model \
+  --dataset /caminho/para/PS_20174392719_1491204439457_log.csv \
+  --output artifacts/pix_fraud_model.joblib
+docker compose up --build
+```
+
+O treino usa até 1 milhão de linhas (amostra aleatória reprodutível por
+padrão), e imprime ROC AUC, average precision e Brier score em uma
+partição de teste estratificada. O serviço lê o arquivo montado em
+`/app/artifacts/pix_fraud_model.joblib`; ajuste `PIX_FRAUD_MODEL_PATH` se
+usar outro local. Sem artefato, `POST /pix/transaction` responde HTTP 503
+em vez de simular uma pontuação ou voltar silenciosamente às regras.
+
+Os cortes iniciais são `PIX_TWO_FACTOR_THRESHOLD=0.30` e
+`PIX_REJECT_THRESHOLD=0.70`. Valores abaixo do primeiro aprovam; do
+primeiro até antes do segundo pedem 2FA; a partir do segundo rejeitam.
+Uma regra local de maior severidade prevalece. Os cortes são parâmetros
+acadêmicos configuráveis, não calibrados para risco financeiro real.
+
+O classificador usa somente valor e hora (`amount`, `step`) porque são
+as únicas variáveis do PaySim compatíveis com o contrato atual. Portanto,
+ele **não** é um stacking treinado com scores de velocidade, perfil,
+contraparte ou grafo, e não é uma estimativa confiável da probabilidade
+de fraude em transações Pix. Para qualquer uso real, treine e valide um
+modelo com dados Pix rotulados e representativos antes de ativar a
+decisão automática. Carregue apenas artefatos confiáveis: arquivos
+Joblib podem executar código ao serem abertos.
+
 ## Regras
 
 Valores monetários são centavos. Os limites abaixo são parâmetros
@@ -83,7 +130,15 @@ Resposta:
 {
   "key": "b3f1c2e0-7d4a-4c1e-9a52-1f0e6c9d2a77",
   "status": "two_factor_required",
-  "metadata": {"reasons": ["amount_requires_confirmation"]}
+  "metadata": {
+    "fraud_score": 0.42,
+    "decision_layer": "paysim_prototype_model",
+    "reasons": [
+      "amount_requires_confirmation",
+      "model_fraud_score_requires_confirmation"
+    ],
+    "triggered_rules": ["amount_requires_confirmation"]
+  }
 }
 ```
 

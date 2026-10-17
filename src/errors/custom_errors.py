@@ -132,3 +132,14 @@ class InvalidPixTimestamp(QIException):
         description = f"The timestamp {timestamp} must be a valid date and time with a timezone."
         translation = "A data e hora da transação devem incluir um fuso horário válido."
         super().__init__(title, self.code, http_status, description, translation)
+
+
+class FraudModelUnavailable(QIException):
+    code = "QIT001011"
+
+    def __init__(self, model_path) -> None:
+        title = "Fraud model unavailable"
+        http_status = 503
+        description = f"The fraud model artifact was not found at {model_path}."
+        translation = "O modelo antifraude ainda não foi treinado ou configurado."
+        super().__init__(title, self.code, http_status, description, translation)

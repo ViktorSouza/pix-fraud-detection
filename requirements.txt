@@ -19,3 +19,7 @@ psycopg2-binary==2.9.10
 # So os connectors (src/connectors/) podem usa-lo — nenhuma chamada
 # externa fica solta no meio do codigo.
 requests==2.32.3
+numpy==2.1.3
+pandas==2.2.3
+scikit-learn==1.6.1
+joblib==1.4.2
