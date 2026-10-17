@@ -35,13 +35,14 @@ PIX_FRAUD_MODEL_PATH = os.environ.get(
 PIX_TWO_FACTOR_THRESHOLD = float(os.environ.get("PIX_TWO_FACTOR_THRESHOLD", "0.30"))
 PIX_REJECT_THRESHOLD = float(os.environ.get("PIX_REJECT_THRESHOLD", "0.70"))
 
-# Rotas públicas: não exigem o header INTERNAL-TOKEN. São as duas que
+# Rotas públicas: não exigem o header INTERNAL-TOKEN. São as rotas que
 # precisam responder pra quem ainda não tem token nenhum: a raiz, que
-# diz quem é este serviço, e o health check, que o Docker consulta pra
-# saber se a API já está de pé.
+# diz quem é este serviço, o health check do Docker e a página local de
+# testes, que pede o token antes de chamar os endpoints protegidos.
 BYPASS_ENDPOINTS = [
     "/",
     "/health_check",
+    "/playground",
 ]
 
 REQUIRED_VARIABLES = ["DATABASE_URL", "INTERNAL_TOKEN"]

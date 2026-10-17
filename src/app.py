@@ -9,7 +9,12 @@ from middlewares import (
     register_request_logger_middleware,
     register_session_manager_middleware,
 )
-from resources import HealthCheckResource, PixTransactionResource, SampleEntityResource
+from resources import (
+    HealthCheckResource,
+    PixTransactionResource,
+    PlaygroundResource,
+    SampleEntityResource,
+)
 from utils.logger import setup_logging
 
 
@@ -125,12 +130,18 @@ def create_app() -> FastAPI:
     health_check_resource = HealthCheckResource()
     sample_entity_resource = SampleEntityResource()
     pix_transaction_resource = PixTransactionResource()
+    playground_resource = PlaygroundResource()
 
     application.add_api_route("/", health_check_resource.on_get_home, methods=["GET"])
     application.add_api_route(
         "/health_check",
         health_check_resource.on_get_health_check,
         methods=["GET"]
+    )
+    application.add_api_route(
+        "/playground",
+        playground_resource.on_get,
+        methods=["GET"],
     )
 
     application.add_api_route(

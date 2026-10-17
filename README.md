@@ -155,6 +155,12 @@ curl http://localhost:3000/pix/transaction/pix-000123 \
 docker compose up
 ```
 
+Com a API no ar, abra [http://localhost:3000/playground](http://localhost:3000/playground)
+para usar a interface local: informe o `INTERNAL-TOKEN`, edite ou envie um
+payload de exemplo, veja o score e consulte análises existentes pelo ID.
+O token fica somente na memória da página; a lista de IDs recentes é salva
+no armazenamento local deste navegador.
+
 Em outro terminal, instale as dependências de teste uma vez e execute a
 suíte com a API e o banco ativos:
 

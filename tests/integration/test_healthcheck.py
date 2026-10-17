@@ -24,6 +24,12 @@ class TestHealthCheck:
         response = ClientRequisition.send("GET", "/health_check")
         assert response.response_status == 204
 
+    def test_playground_is_available_without_internal_token(self):
+        response = ClientRequisition.send("GET", "/playground")
+        assert response.response_status == 200
+        assert response.response.headers["content-type"].startswith("text/html")
+        assert b"Pix Fraud Playground" in response.response_content
+
     def test_no_token(self):
         response = ClientRequisition.send("PUT", "/sample")
         assert response.response_status == 403
