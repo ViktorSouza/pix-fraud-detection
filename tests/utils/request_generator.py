@@ -27,6 +27,15 @@ class RequestGenerator:
         return response.response_status, response.response_json
 
     @staticmethod
+    def POST_verify_pix_two_factor(transaction_id: str) -> BaseConnectorResponse:
+        response = ClientRequisition.send(
+            "POST",
+            f"/pix/transaction/{transaction_id}/verify-two-factor",
+            headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+        )
+        return response.response_status, response.response_json
+
+    @staticmethod
     def POST_sample_entity(sample_entity_payload: dict) -> BaseConnectorResponse:
         response = ClientRequisition.send(
             "POST",

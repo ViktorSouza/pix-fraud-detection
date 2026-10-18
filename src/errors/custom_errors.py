@@ -123,6 +123,30 @@ class DuplicatedPixTransaction(QIException):
         super().__init__(title, self.code, http_status, description, translation)
 
 
+class PixTwoFactorNotRequired(QIException):
+    code = "QIT001012"
+
+    def __init__(self, transaction_id) -> None:
+        title = "Pix transaction does not require two-factor verification"
+        http_status = 409
+        description = (
+            f"Pix transaction {transaction_id} is not waiting for two-factor verification."
+        )
+        translation = "Esta transação Pix não está aguardando verificação de duas etapas."
+        super().__init__(title, self.code, http_status, description, translation)
+
+
+class PixTwoFactorSimulationUnavailable(QIException):
+    code = "QIT001013"
+
+    def __init__(self) -> None:
+        title = "Two-factor simulation unavailable"
+        http_status = 403
+        description = "Simulated two-factor verification is only available in development environments."
+        translation = "A simulação da verificação em duas etapas só está disponível em desenvolvimento."
+        super().__init__(title, self.code, http_status, description, translation)
+
+
 class InvalidPixTimestamp(QIException):
     code = "QIT001010"
 

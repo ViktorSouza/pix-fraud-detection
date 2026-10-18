@@ -179,6 +179,11 @@ def create_app() -> FastAPI:
         pix_transaction_resource.on_get_by_id,
         methods=["GET"],
     )
+    application.add_api_route(
+        "/pix/transaction/{transaction_id}/verify-two-factor",
+        pix_transaction_resource.on_post_verify_two_factor,
+        methods=["POST"],
+    )
 
     register_error_handlers(application)
 

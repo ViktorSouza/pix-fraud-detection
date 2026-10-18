@@ -7,14 +7,15 @@ from sklearn.ensemble import IsolationForest
 
 from utils.geolocation import calculate_location_speed_kmh
 
-
-MIN_PAYER_HISTORY = 20
-MIN_GLOBAL_HISTORY = 20
-MAX_PAYER_HISTORY = 200
+MIN_PAYER_HISTORY = 50
+MIN_GLOBAL_HISTORY = 200
+MAX_PAYER_HISTORY = 300
 ANOMALY_FEATURE_NAMES = (
     "amount_log_reais",
     "hour_sin",
     "hour_cos",
+    "hours_since_last_transaction_log",
+    "has_previous_transaction",
     "travel_speed_log_kmh",
     "has_location_velocity",
     "is_new_device",
@@ -40,6 +41,18 @@ def _features_for_observation(
         + observation.transaction_date.microsecond / 3_600_000_000
     )
     angle = 2 * math.pi * hour / 24
+    previous_observation = previous_observations[-1] if previous_observations else None
+    hours_since_last_transaction = (
+        max(
+            0.0,
+            (
+                observation.transaction_date - previous_observation.transaction_date
+            ).total_seconds()
+            / 3600,
+        )
+        if previous_observation is not None
+        else 0.0
+    )
     location_speed = None
     if observation.latitude is not None and observation.longitude is not None:
         previous_location = next(
@@ -62,12 +75,16 @@ def _features_for_observation(
             if movement is not None:
                 _, location_speed = movement
 
-    device_seen = any(item.device_id == observation.device_id for item in previous_observations)
+    device_seen = any(
+        item.device_id == observation.device_id for item in previous_observations
+    )
     return np.asarray(
         [
             math.log1p(observation.amount_cents / 100),
             math.sin(angle),
             math.cos(angle),
+            math.log1p(hours_since_last_transaction),
+            float(previous_observation is not None),
             math.log1p(location_speed or 0),
             float(location_speed is not None),
             float(bool(previous_observations) and not device_seen),
@@ -79,7 +96,9 @@ def _features_for_observation(
 def _history_matrix(
     history: list[BehaviorObservation],
 ) -> tuple[np.ndarray, list[BehaviorObservation]]:
-    ordered_history = sorted(history, key=lambda item: item.transaction_date)[-MAX_PAYER_HISTORY:]
+    ordered_history = sorted(history, key=lambda item: item.transaction_date)[
+        -MAX_PAYER_HISTORY:
+    ]
     rows = [
         _features_for_observation(observation, ordered_history[:index])
         for index, observation in enumerate(ordered_history)
@@ -87,7 +106,9 @@ def _history_matrix(
     return np.asarray(rows, dtype=np.float64), ordered_history
 
 
-def _score_isolation_forest(training_features: np.ndarray, current_features: np.ndarray) -> float:
+def _score_isolation_forest(
+    training_features: np.ndarray, current_features: np.ndarray
+) -> float:
     model = IsolationForest(
         n_estimators=100,
         contamination="auto",
@@ -96,7 +117,9 @@ def _score_isolation_forest(training_features: np.ndarray, current_features: np.
     model.fit(training_features)
 
     training_normality = model.decision_function(training_features)
-    current_normality = float(model.decision_function(current_features.reshape(1, -1))[0])
+    current_normality = float(
+        model.decision_function(current_features.reshape(1, -1))[0]
+    )
     median_normality = float(np.median(training_normality))
     mad = float(np.median(np.abs(training_normality - median_normality)))
     spread = max(1.4826 * mad, float(np.std(training_normality)) * 0.25, 0.02)
@@ -135,4 +158,6 @@ def score_global_behavior(
     current_features = _features_for_observation(
         current, payer_histories.get(current_payer, [])
     )
-    return _score_isolation_forest(np.asarray(training_rows, dtype=np.float64), current_features)
+    return _score_isolation_forest(
+        np.asarray(training_rows, dtype=np.float64), current_features
+    )

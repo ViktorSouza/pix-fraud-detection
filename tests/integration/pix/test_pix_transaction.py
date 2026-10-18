@@ -83,6 +83,38 @@ class TestPixTransaction:
         assert response["status"] in {"two_factor_required", "rejected"}
         assert "destination_account_is_new" in response["metadata"]["reasons"]
 
+    def test_development_two_factor_verification_approves_transaction(self):
+        payload = PayloadGenerator.create_pix_transaction_payload(amount=100_000)
+        status, analysis = RequestGenerator.POST_pix_transaction(payload)
+
+        assert status == 200
+        if analysis["status"] != "two_factor_required":
+            pytest.skip("The configured model rejected this verification test transaction.")
+
+        status, verified = RequestGenerator.POST_verify_pix_two_factor(payload["id"])
+
+        assert status == 200
+        assert verified["status"] == "approved"
+        assert verified["metadata"]["two_factor_verification"]["status"] == "verified"
+        assert verified["metadata"]["two_factor_verification"]["method"] == "development_simulation"
+        assert verified["metadata"]["two_factor_verification"]["verified_at"]
+
+        status, stored = RequestGenerator.GET_pix_transaction(payload["id"])
+        assert status == 200
+        assert stored == verified
+
+        status, repeated = RequestGenerator.POST_verify_pix_two_factor(payload["id"])
+        assert status == 200
+        assert repeated == verified
+
+    def test_two_factor_verification_returns_not_found_for_unknown_transaction(self):
+        status, response = RequestGenerator.POST_verify_pix_two_factor(
+            f"missing-{datetime.now(timezone.utc).timestamp()}"
+        )
+
+        assert status == 404
+        assert response["code"] == "QIT001008"
+
     def test_requires_two_factor_for_impossible_location_velocity(self):
         now = datetime.now(timezone.utc)
         baseline = PayloadGenerator.create_pix_transaction_payload(

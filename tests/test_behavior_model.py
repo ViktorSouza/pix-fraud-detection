@@ -1,14 +1,19 @@
 from datetime import datetime, timedelta, timezone
+import math
 import random
 
+import pytest
+
 from behavior_model import (
+    ANOMALY_FEATURE_NAMES,
     BehaviorObservation,
+    _features_for_observation,
     score_global_behavior,
     score_payer_behavior,
 )
 
 
-def _history(count: int = 30) -> list[BehaviorObservation]:
+def _history(count: int = 60) -> list[BehaviorObservation]:
     randomizer = random.Random(7)
     start = datetime(2026, 1, 1, 14, tzinfo=timezone.utc)
     return [
@@ -22,6 +27,31 @@ def _history(count: int = 30) -> list[BehaviorObservation]:
         )
         for index in range(count)
     ]
+
+
+def test_features_include_log_elapsed_hours_since_previous_transaction():
+    previous = BehaviorObservation(
+        amount_cents=20_000,
+        transaction_date=datetime(2026, 1, 1, 10, tzinfo=timezone.utc),
+        device_id="device-known",
+        latitude=-23.56,
+        longitude=-46.65,
+    )
+    current = BehaviorObservation(
+        amount_cents=20_000,
+        transaction_date=previous.transaction_date + timedelta(hours=6),
+        device_id="device-known",
+        latitude=-23.56,
+        longitude=-46.65,
+    )
+
+    features = _features_for_observation(current, [previous])
+
+    assert len(features) == len(ANOMALY_FEATURE_NAMES)
+    assert features[ANOMALY_FEATURE_NAMES.index("hours_since_last_transaction_log")] == pytest.approx(
+        math.log1p(6)
+    )
+    assert features[ANOMALY_FEATURE_NAMES.index("has_previous_transaction")] == 1
 
 
 def test_payer_model_scores_unusual_low_value_and_location_as_anomalous():
@@ -84,7 +114,7 @@ def test_global_behavior_model_can_score_a_payer_without_history():
                 longitude=-46.65,
             ),
         )
-        for index in range(30)
+        for index in range(220)
     ]
 
     score = score_global_behavior(

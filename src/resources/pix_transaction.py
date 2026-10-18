@@ -23,3 +23,11 @@ class PixTransactionResource:
             content=jsonable_encoder(analysis),
             status_code=http_status.HTTP_200_OK,
         )
+
+    def on_post_verify_two_factor(self, transaction_id: str) -> JSONResponse:
+        controller = PixTransactionController()
+        analysis = controller.mark_two_factor_verified(transaction_id)
+        return JSONResponse(
+            content=jsonable_encoder(analysis),
+            status_code=http_status.HTTP_200_OK,
+        )

@@ -4,6 +4,7 @@ from pathlib import Path
 from sqlalchemy.exc import IntegrityError
 
 from constants import (
+    PIX_DEV_MODE,
     PIX_FRAUD_MODEL_PATH,
     PIX_MAX_LOCATION_SPEED_KMH,
     PIX_REJECT_THRESHOLD,
@@ -21,6 +22,8 @@ from errors import (
     DuplicatedPixTransaction,
     InvalidPixTimestamp,
     NotFoundPixTransaction,
+    PixTwoFactorNotRequired,
+    PixTwoFactorSimulationUnavailable,
 )
 from fraud_model import build_pix_model_features, combine_decisions, score_transaction
 from repositories import PixTransactionRepository
@@ -43,29 +46,43 @@ class PixTransactionController(BaseController):
 
     def analyze(self, transaction_data: dict) -> dict:
         transaction_id = transaction_data["id"]
-        if self.pix_transaction_repository.get_by_transaction_id(transaction_id) is not None:
+        if (
+            self.pix_transaction_repository.get_by_transaction_id(transaction_id)
+            is not None
+        ):
             raise DuplicatedPixTransaction(transaction_id)
 
         transaction_date = self._parse_timestamp(transaction_data["transaction_date"])
         source_account = transaction_data["source_account"]
         destination_account = transaction_data["destination_account"]
         source_document_number = source_account["owner"]["document_number"]
-        source_account_opening_date = self._parse_timestamp(source_account["opening_date"])
-        destination_fingerprint = self.pix_transaction_repository.fingerprint_destination(
-            destination_account
+        source_account_opening_date = self._parse_timestamp(
+            source_account["opening_date"]
+        )
+        destination_fingerprint = (
+            self.pix_transaction_repository.fingerprint_destination(destination_account)
         )
         device_id = transaction_data["source"]["device_id"]
-        destination_opening_date = self._parse_timestamp(destination_account["opening_date"])
+        destination_opening_date = self._parse_timestamp(
+            destination_account["opening_date"]
+        )
 
         profile = self.pix_transaction_repository.get_approved_profile(
             source_document_number=source_document_number,
             since=transaction_date - timedelta(hours=24),
-            velocity_since=transaction_date - timedelta(minutes=VELOCITY_WINDOW_MINUTES),
+            velocity_since=transaction_date
+            - timedelta(minutes=VELOCITY_WINDOW_MINUTES),
             transaction_date=transaction_date,
             destination_fingerprint=destination_fingerprint,
             device_id=device_id,
         )
-        previous_count, previous_amount, velocity_count, destination_seen, device_seen = profile
+        (
+            previous_count,
+            previous_amount,
+            velocity_count,
+            destination_seen,
+            device_seen,
+        ) = profile
 
         rejection_reasons = []
         two_factor_reasons = []
@@ -74,13 +91,18 @@ class PixTransactionController(BaseController):
         if transaction_data["amount"] > MAX_TRANSACTION_AMOUNT_CENTS:
             rejection_reasons.append("amount_over_transaction_limit")
 
-        if previous_amount + transaction_data["amount"] > MAX_APPROVED_AMOUNT_PER_24_HOURS_CENTS:
+        if (
+            previous_amount + transaction_data["amount"]
+            > MAX_APPROVED_AMOUNT_PER_24_HOURS_CENTS
+        ):
             rejection_reasons.append("amount_over_24_hour_limit")
 
         if transaction_data["amount"] >= TWO_FACTOR_AMOUNT_CENTS:
             two_factor_reasons.append("amount_requires_confirmation")
 
-        if transaction_date - destination_opening_date < timedelta(days=NEW_DESTINATION_AGE_DAYS):
+        if transaction_date - destination_opening_date < timedelta(
+            days=NEW_DESTINATION_AGE_DAYS
+        ):
             two_factor_reasons.append("destination_account_is_new")
 
         if velocity_count >= VELOCITY_TRANSACTION_LIMIT:
@@ -94,10 +116,12 @@ class PixTransactionController(BaseController):
 
         current_location = transaction_data["source"].get("geolocation")
         if current_location is not None:
-            previous_location = self.pix_transaction_repository.get_latest_approved_location(
-                source_document_number=source_document_number,
-                since=transaction_date - timedelta(hours=24),
-                transaction_date=transaction_date,
+            previous_location = (
+                self.pix_transaction_repository.get_latest_approved_location(
+                    source_document_number=source_document_number,
+                    since=transaction_date - timedelta(hours=24),
+                    transaction_date=transaction_date,
+                )
             )
             if previous_location is not None:
                 previous_date, previous_latitude, previous_longitude = previous_location
@@ -131,8 +155,12 @@ class PixTransactionController(BaseController):
             prior_approved_count_10m=velocity_count,
             destination_seen=destination_seen,
             device_seen=device_seen,
-            location_speed_kmh=location_velocity["speed_kmh"] if location_velocity else None,
+            location_speed_kmh=(
+                location_velocity["speed_kmh"] if location_velocity else None
+            ),
         )
+        rejection_reasons = []
+        two_factor_reasons = []
         current_location = transaction_data["source"].get("geolocation") or {}
         current_observation = BehaviorObservation(
             amount_cents=transaction_data["amount"],
@@ -149,8 +177,7 @@ class PixTransactionController(BaseController):
                 latitude=latitude,
                 longitude=longitude,
             )
-            for amount, date, historical_device_id, latitude, longitude
-            in self.pix_transaction_repository.get_approved_behavior_history(
+            for amount, date, historical_device_id, latitude, longitude in self.pix_transaction_repository.get_approved_behavior_history(
                 source_document_number=source_document_number,
                 transaction_date=transaction_date,
             )
@@ -161,8 +188,10 @@ class PixTransactionController(BaseController):
             score_source = "payer_approved_history"
             model_history_count = len(behavior_history)
         else:
-            global_history = self.pix_transaction_repository.get_global_approved_behavior_history(
-                transaction_date=transaction_date,
+            global_history = (
+                self.pix_transaction_repository.get_global_approved_behavior_history(
+                    transaction_date=transaction_date,
+                )
             )
             global_observations = [
                 (
@@ -175,8 +204,7 @@ class PixTransactionController(BaseController):
                         longitude=longitude,
                     ),
                 )
-                for payer, amount, date, historical_device_id, latitude, longitude
-                in global_history
+                for payer, amount, date, historical_device_id, latitude, longitude in global_history
             ]
             fraud_score = score_global_behavior(
                 global_observations,
@@ -240,16 +268,49 @@ class PixTransactionController(BaseController):
             self.session.commit()
         except IntegrityError:
             self.session.rollback()
-            if self.pix_transaction_repository.get_by_transaction_id(transaction_id) is not None:
+            if (
+                self.pix_transaction_repository.get_by_transaction_id(transaction_id)
+                is not None
+            ):
                 raise DuplicatedPixTransaction(transaction_id) from None
             raise
         return result
 
     def get_by_id(self, transaction_id: str) -> dict:
-        pix_transaction = self.pix_transaction_repository.get_by_transaction_id(transaction_id)
+        pix_transaction = self.pix_transaction_repository.get_by_transaction_id(
+            transaction_id
+        )
         if pix_transaction is None:
             raise NotFoundPixTransaction(transaction_id)
 
+        return PixTransactionDTO.obj_to_dict(pix_transaction)
+
+    def mark_two_factor_verified(self, transaction_id: str) -> dict:
+        if not PIX_DEV_MODE:
+            raise PixTwoFactorSimulationUnavailable()
+
+        pix_transaction = self.pix_transaction_repository.get_by_transaction_id(
+            transaction_id
+        )
+        if pix_transaction is None:
+            raise NotFoundPixTransaction(transaction_id)
+
+        metadata = dict(pix_transaction.analysis_metadata)
+        verification = metadata.get("two_factor_verification")
+        if isinstance(verification, dict) and verification.get("status") == "verified":
+            return PixTransactionDTO.obj_to_dict(pix_transaction)
+
+        if pix_transaction.status != "two_factor_required":
+            raise PixTwoFactorNotRequired(transaction_id)
+
+        metadata["two_factor_verification"] = {
+            "status": "verified",
+            "verified_at": datetime.now(timezone.utc).isoformat(),
+            "method": "development_simulation",
+        }
+        pix_transaction.analysis_metadata = metadata
+        pix_transaction.status = "approved"
+        self.session.commit()
         return PixTransactionDTO.obj_to_dict(pix_transaction)
 
     @staticmethod

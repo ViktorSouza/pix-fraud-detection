@@ -65,13 +65,24 @@ spoofing ou localização compartilhada não são tratados.
 
 O modelo individual é não supervisionado: não prevê o recebedor nem
 precisa de rótulos de fraude para aprender o padrão do pagador. Ele usa
-valor, horário, velocidade estimada entre localizações conhecidas e
-novidade do aparelho. O destinatário é excluído do modelo individual;
+valor, horário, intervalo desde a transação anterior, velocidade estimada
+entre localizações conhecidas e novidade do aparelho. O intervalo é
+medido em horas e transformado com `log1p` para reduzir a influência de
+pausas muito longas; a presença/ausência de transação anterior também é
+um atributo separado. O destinatário é excluído do modelo individual;
 novidade de destino continua coberta por uma regra determinística. Só
 transações aprovadas entram no histórico. O perfil individual requer pelo
-menos 20 registros; antes disso, a API tenta usar até 200 transações
-aprovadas de outros pagadores (com mínimo de 20 no conjunto) como fallback
-global.
+menos 50 registros; antes disso, a API tenta usar até 200 transações
+aprovadas de outros pagadores (com mínimo de 200 no conjunto) como
+fallback global.
+
+Anomalia persistente não deve ficar automaticamente mais permissiva só
+porque passou tempo: alguém pode esperar deliberadamente para contornar a
+proteção. Uma alternativa mais segura é manter o score de risco e permitir
+redução da fricção apenas após um sinal independente de legitimidade, como
+2FA bem-sucedido ou confirmação autenticada no canal confiável. Repetições
+sem validação podem aumentar a fricção ou acionar limites de tentativas,
+em vez de reduzir o risco pelo simples decurso do tempo.
 
 `fraud_score` é um score de anomalia normalizado, não a probabilidade de
 fraude. Um valor alto quer dizer que a observação se afasta do padrão
@@ -139,8 +150,8 @@ processado novamente e retorna HTTP 409.
 
 ## Contrato Pix
 
-Os dois endpoints exigem o cabeçalho `INTERNAL-TOKEN` herdado do Base
-Service. Os campos e objetos aninhados são validados por
+As rotas Pix exigem o cabeçalho `INTERNAL-TOKEN` herdado do Base Service.
+Os campos e objetos aninhados do endpoint de análise são validados por
 `src/schemas/post_pix_transaction.json`; datas devem incluir fuso
 horário. `geolocation` é opcional.
 
@@ -211,6 +222,26 @@ Consulte a análise gravada usando o mesmo `id` enviado:
 curl http://localhost:3000/pix/transaction/pix-000123 \
   -H "INTERNAL-TOKEN: default_token"
 ```
+
+Para testar o fluxo de verificação, envie um POST sem corpo para:
+
+```bash
+curl -X POST http://localhost:3000/pix/transaction/pix-000123/verify-two-factor \
+  -H "INTERNAL-TOKEN: default_token"
+```
+
+A rota só aceita análises com status `two_factor_required`; ela grava em
+`metadata.two_factor_verification` o status `verified`, o horário e o método
+`development_simulation`. Em `APP_ENV=local`, `dev`, `development` ou `test`,
+a confirmação simulada também muda o status para `approved`; chamadas repetidas
+são idempotentes. Em qualquer outro ambiente, a rota responde HTTP 403.
+Isso é apenas uma conveniência para testes, não uma verificação real de
+identidade nem uma liquidação Pix. Como o `INTERNAL-TOKEN` autentica apenas o
+serviço chamador, qualquer integração de produção precisará validar um
+desafio/OTP confiável antes de aprovar a transação.
+
+No Playground, quando o ambiente permite a simulação, análises pendentes de
+2FA exibem o botão **Aceitar 2FA e aprovar (dev)**.
 
 ## Como rodar e testar
 
