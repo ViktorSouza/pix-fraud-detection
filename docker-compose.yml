@@ -45,7 +45,7 @@ services:
       PIX_FRAUD_MODEL_PATH: ${PIX_FRAUD_MODEL_PATH:-/app/artifacts/pix_fraud_model.joblib}
       PIX_TWO_FACTOR_THRESHOLD: ${PIX_TWO_FACTOR_THRESHOLD:-0.30}
       PIX_REJECT_THRESHOLD: ${PIX_REJECT_THRESHOLD:-0.70}
-      PIX_MAX_LOCATION_SPEED_KMH: ${PIX_MAX_LOCATION_SPEED_KMH:-3000}
+      PIX_MAX_LOCATION_SPEED_KMH: ${PIX_MAX_LOCATION_SPEED_KMH:-900}
     volumes:
       # Monta o codigo pra dentro do container: salvou o arquivo,
       # a API recarrega sozinha (o --reload ali embaixo).

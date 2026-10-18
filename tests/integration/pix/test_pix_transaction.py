@@ -230,7 +230,7 @@ class TestPixTransaction:
         self.assert_decision_matches_score(response)
         assert response["status"] in {"two_factor_required", "rejected"}
         assert "impossible_location_velocity" in response["metadata"]["reasons"]
-        assert response["metadata"]["location_velocity"]["speed_kmh"] > 3000
+        assert response["metadata"]["location_velocity"]["speed_kmh"] > 900
 
     def test_rejects_amount_over_transaction_limit(self):
         payload = PayloadGenerator.create_pix_transaction_payload(amount=500_001)
