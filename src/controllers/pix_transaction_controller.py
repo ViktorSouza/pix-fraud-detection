@@ -12,9 +12,11 @@ from constants import (
 )
 from behavior_model import (
     BehaviorObservation,
+    CONFIRMED_AMOUNT_TOLERANCE_PERCENT,
     DIRECTIONAL_RISK_NAMES,
     evaluate_global_behavior,
     evaluate_payer_behavior,
+    is_amount_within_confirmed_range,
 )
 from controllers.base_controller import BaseController
 from dtos import PixTransactionDTO
@@ -35,6 +37,7 @@ TWO_FACTOR_AMOUNT_CENTS = 100_000
 NEW_DESTINATION_AGE_DAYS = 7
 VELOCITY_WINDOW_MINUTES = 10
 VELOCITY_TRANSACTION_LIMIT = 3
+TWO_FACTOR_AMOUNT_WINDOW_MINUTES = 30
 
 
 class PixTransactionController(BaseController):
@@ -84,6 +87,20 @@ class PixTransactionController(BaseController):
             device_seen,
         ) = profile
 
+        recent_two_factor_amount = (
+            self.pix_transaction_repository.get_recent_two_factor_confirmed_amount(
+                source_document_number=source_document_number,
+                device_id=device_id,
+                since=transaction_date
+                - timedelta(minutes=TWO_FACTOR_AMOUNT_WINDOW_MINUTES),
+                transaction_date=transaction_date,
+            )
+        )
+        amount_matches_recent_two_factor = is_amount_within_confirmed_range(
+            transaction_data["amount"],
+            recent_two_factor_amount,
+        )
+
         rejection_reasons = []
         two_factor_reasons = []
         location_velocity = None
@@ -97,7 +114,10 @@ class PixTransactionController(BaseController):
         ):
             rejection_reasons.append("amount_over_24_hour_limit")
 
-        if transaction_data["amount"] >= TWO_FACTOR_AMOUNT_CENTS:
+        if (
+            transaction_data["amount"] >= TWO_FACTOR_AMOUNT_CENTS
+            and not amount_matches_recent_two_factor
+        ):
             two_factor_reasons.append("amount_requires_confirmation")
 
         if transaction_date - destination_opening_date < timedelta(
@@ -159,8 +179,6 @@ class PixTransactionController(BaseController):
                 location_velocity["speed_kmh"] if location_velocity else None
             ),
         )
-        rejection_reasons = []
-        two_factor_reasons = []
         current_location = transaction_data["source"].get("geolocation") or {}
         current_observation = BehaviorObservation(
             amount_cents=transaction_data["amount"],
@@ -185,6 +203,9 @@ class PixTransactionController(BaseController):
         behavior_result = evaluate_payer_behavior(
             behavior_history,
             current_observation,
+            confirmed_amount_cents=(
+                recent_two_factor_amount if amount_matches_recent_two_factor else None
+            ),
         )
         behavior_risk_signals = {}
         if behavior_result is not None:
@@ -217,6 +238,11 @@ class PixTransactionController(BaseController):
                 current_payer=source_document_number,
                 current=current_observation,
                 current_payer_history=behavior_history,
+                confirmed_amount_cents=(
+                    recent_two_factor_amount
+                    if amount_matches_recent_two_factor
+                    else None
+                ),
             )
             if behavior_result is not None:
                 fraud_score = behavior_result.score
@@ -264,6 +290,19 @@ class PixTransactionController(BaseController):
         }
         if location_velocity is not None:
             metadata["location_velocity"] = location_velocity
+        if amount_matches_recent_two_factor:
+            metadata["two_factor_amortization"] = {
+                "confirmed_amount_cents": recent_two_factor_amount,
+                "window_minutes": TWO_FACTOR_AMOUNT_WINDOW_MINUTES,
+                "amount_tolerance_percent": CONFIRMED_AMOUNT_TOLERANCE_PERCENT,
+                "amount_requires_confirmation_suppressed": (
+                    transaction_data["amount"] >= TWO_FACTOR_AMOUNT_CENTS
+                ),
+                "behavior_amount_increase_suppressed": (
+                    behavior_result is not None
+                    and behavior_result.signals["amount_increase"] == 0
+                ),
+            }
 
         pix_transaction = self.pix_transaction_repository.create(
             transaction_data=transaction_data,

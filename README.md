@@ -83,6 +83,13 @@ no histórico individual. Esse perfil requer pelo menos 50 registros;
 antes disso, a API compara com distribuições globais, desde que haja ao
 menos 200 transações aprovadas disponíveis.
 
+Após uma confirmação bem-sucedida de 2FA, durante 30 minutos no mesmo
+pagador e aparelho, valores entre 75% e 125% do valor confirmado não acionam
+novamente a regra `amount_requires_confirmation` nem elevam o sinal
+comportamental `amount_increase`. Outros sinais de risco e limites rígidos
+continuam ativos. A resposta registra a amortização em
+`metadata.two_factor_amortization`.
+
 Anomalia persistente não deve ficar automaticamente mais permissiva só
 porque passou tempo: alguém pode esperar deliberadamente para contornar a
 proteção. Uma alternativa mais segura é manter o score de risco e permitir

@@ -2,7 +2,7 @@ from datetime import datetime
 from hashlib import sha256
 from uuid import uuid4
 
-from sqlalchemy import Float, case, func
+from sqlalchemy import DateTime, Float, case, func
 
 from database import Context
 from models import PixTransaction
@@ -89,6 +89,37 @@ class PixTransactionRepository:
         if location is None or location[1] is None or location[2] is None:
             return None
         return location[0], float(location[1]), float(location[2])
+
+    def get_recent_two_factor_confirmed_amount(
+        self,
+        source_document_number: str,
+        device_id: str,
+        since: datetime,
+        transaction_date: datetime,
+    ) -> int | None:
+        verified_at = (
+            PixTransaction.analysis_metadata["two_factor_verification"][
+                "verified_at"
+            ]
+            .astext.cast(DateTime(timezone=True))
+        )
+        return (
+            self.session.query(PixTransaction.amount)
+            .filter(
+                PixTransaction.source_document_number == source_document_number,
+                PixTransaction.device_id == device_id,
+                PixTransaction.status == "approved",
+                PixTransaction.analysis_metadata["two_factor_verification"][
+                    "status"
+                ].astext
+                == "verified",
+                verified_at >= since,
+                verified_at <= transaction_date,
+            )
+            .order_by(verified_at.desc(), PixTransaction.id.desc())
+            .limit(1)
+            .scalar()
+        )
 
     def get_approved_behavior_history(
         self,

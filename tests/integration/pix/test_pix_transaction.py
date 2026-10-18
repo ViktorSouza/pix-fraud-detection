@@ -107,6 +107,40 @@ class TestPixTransaction:
         assert status == 200
         assert repeated == verified
 
+    def test_recent_two_factor_allows_a_similar_amount_without_repeating_amount_rule(self):
+        now = datetime.now(timezone.utc)
+        first = PayloadGenerator.create_pix_transaction_payload(
+            amount=100_000,
+            transaction_date=now,
+        )
+        status, analysis = RequestGenerator.POST_pix_transaction(first)
+        assert status == 200
+        if analysis["status"] != "two_factor_required":
+            pytest.skip("The configured model did not leave the setup transaction pending 2FA.")
+
+        status, verified = RequestGenerator.POST_verify_pix_two_factor(first["id"])
+        assert status == 200
+        assert verified["status"] == "approved"
+
+        similar = PayloadGenerator.create_pix_transaction_payload(
+            amount=125_000,
+            transaction_date=now + timedelta(minutes=1),
+            source_document_number=first["source_account"]["owner"]["document_number"],
+            destination_account_number=first["destination_account"]["account_number"],
+            device_id=first["source"]["device_id"],
+        )
+        status, response = RequestGenerator.POST_pix_transaction(similar)
+
+        assert status == 200
+        assert "amount_requires_confirmation" not in response["metadata"]["reasons"]
+        assert response["metadata"]["two_factor_amortization"] == {
+            "confirmed_amount_cents": 100_000,
+            "window_minutes": 30,
+            "amount_tolerance_percent": 25,
+            "amount_requires_confirmation_suppressed": True,
+            "behavior_amount_increase_suppressed": False,
+        }
+
     def test_two_factor_verification_returns_not_found_for_unknown_transaction(self):
         status, response = RequestGenerator.POST_verify_pix_two_factor(
             f"missing-{datetime.now(timezone.utc).timestamp()}"

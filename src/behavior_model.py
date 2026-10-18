@@ -16,6 +16,7 @@ DIRECTIONAL_RISK_NAMES = (
     "new_device",
 )
 _NEW_DEVICE_RISK = 0.4
+CONFIRMED_AMOUNT_TOLERANCE_PERCENT = 25
 
 
 class _DirectionalFeatures(TypedDict):
@@ -118,10 +119,26 @@ def _combine_directional_risks(signals: dict[str, float]) -> float:
     return float(1 - math.prod(1 - score for score in signals.values()))
 
 
+def is_amount_within_confirmed_range(
+    amount_cents: int,
+    confirmed_amount_cents: int | None,
+) -> bool:
+    if confirmed_amount_cents is None:
+        return False
+
+    tolerance = CONFIRMED_AMOUNT_TOLERANCE_PERCENT
+    return (
+        amount_cents * 100 >= confirmed_amount_cents * (100 - tolerance)
+        and amount_cents * 100 <= confirmed_amount_cents * (100 + tolerance)
+    )
+
+
 def _score_directional_behavior(
     history_features: list[_DirectionalFeatures],
     current_features: _DirectionalFeatures,
     is_new_device: bool,
+    current_amount_cents: int,
+    confirmed_amount_cents: int | None = None,
 ) -> DirectionalRiskScore:
     amount_history = [features["amount_log_reais"] for features in history_features]
     interval_history = [
@@ -141,7 +158,12 @@ def _score_directional_behavior(
         "amount_increase": _upper_directional_risk(
             amount_history,
             current_features["amount_log_reais"],
-        ),
+        )
+        if not is_amount_within_confirmed_range(
+            current_amount_cents,
+            confirmed_amount_cents,
+        )
+        else 0.0,
         "shorter_transaction_interval": (
             _lower_directional_risk(interval_history, current_interval)
             if interval_history and current_interval is not None
@@ -160,6 +182,7 @@ def _score_directional_behavior(
 def evaluate_payer_behavior(
     history: list[BehaviorObservation],
     current: BehaviorObservation,
+    confirmed_amount_cents: int | None = None,
 ) -> DirectionalRiskScore | None:
     if len(history) < MIN_PAYER_HISTORY:
         return None
@@ -177,6 +200,8 @@ def evaluate_payer_behavior(
         history_features,
         current_features,
         is_new_device=current.device_id not in known_devices,
+        current_amount_cents=current.amount_cents,
+        confirmed_amount_cents=confirmed_amount_cents,
     )
 
 
@@ -193,6 +218,7 @@ def evaluate_global_behavior(
     current_payer: str,
     current: BehaviorObservation,
     current_payer_history: list[BehaviorObservation] | None = None,
+    confirmed_amount_cents: int | None = None,
 ) -> DirectionalRiskScore | None:
     if len(history) < MIN_GLOBAL_HISTORY:
         return None
@@ -222,6 +248,8 @@ def evaluate_global_behavior(
         is_new_device=(
             bool(current_history) and current.device_id not in known_devices
         ),
+        current_amount_cents=current.amount_cents,
+        confirmed_amount_cents=confirmed_amount_cents,
     )
 
 

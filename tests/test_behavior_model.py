@@ -10,6 +10,7 @@ from behavior_model import (
     _features_for_observation,
     evaluate_global_behavior,
     evaluate_payer_behavior,
+    is_amount_within_confirmed_range,
     score_global_behavior,
     score_payer_behavior,
 )
@@ -149,6 +150,53 @@ def test_higher_amount_increases_risk_but_lower_amount_is_neutral():
     assert higher_result.signals["amount_increase"] > 0.30
     assert lower_result.signals["amount_increase"] == 0
     assert "amount_increase" in DIRECTIONAL_RISK_NAMES
+
+
+def test_recently_confirmed_amount_and_amounts_within_25_percent_do_not_raise_risk():
+    history = _history()
+    current = BehaviorObservation(
+        amount_cents=125_000,
+        transaction_date=history[-1].transaction_date + timedelta(days=1),
+        device_id="device-known",
+        latitude=history[-1].latitude,
+        longitude=history[-1].longitude,
+    )
+
+    result = evaluate_payer_behavior(
+        history,
+        current,
+        confirmed_amount_cents=100_000,
+    )
+
+    assert result is not None
+    assert result.signals["amount_increase"] == 0
+    assert is_amount_within_confirmed_range(75_000, 100_000)
+    assert is_amount_within_confirmed_range(125_000, 100_000)
+    assert not is_amount_within_confirmed_range(125_001, 100_000)
+    assert not is_amount_within_confirmed_range(125_000, None)
+
+
+def test_confirmed_amount_does_not_suppress_independent_behavior_signals():
+    history = _history()
+    current = BehaviorObservation(
+        amount_cents=100_000,
+        transaction_date=history[-1].transaction_date + timedelta(minutes=1),
+        device_id="new-device",
+        latitude=40.71,
+        longitude=-74.0,
+    )
+
+    result = evaluate_payer_behavior(
+        history,
+        current,
+        confirmed_amount_cents=100_000,
+    )
+
+    assert result is not None
+    assert result.signals["amount_increase"] == 0
+    assert result.signals["shorter_transaction_interval"] > 0
+    assert result.signals["higher_travel_speed"] > 0
+    assert result.signals["new_device"] == 0.4
 
 
 def test_new_device_is_a_positive_risk_signal():
