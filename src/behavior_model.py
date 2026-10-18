@@ -1,25 +1,27 @@
 from datetime import datetime
 import math
-from typing import NamedTuple
+from typing import NamedTuple, TypedDict
 
 import numpy as np
-from sklearn.ensemble import IsolationForest
 
 from utils.geolocation import calculate_location_speed_kmh
 
 MIN_PAYER_HISTORY = 50
 MIN_GLOBAL_HISTORY = 200
-MAX_PAYER_HISTORY = 300
-ANOMALY_FEATURE_NAMES = (
-    "amount_log_reais",
-    "time_of_day_sin",
-    "time_of_day_cos",
-    "hours_since_last_transaction_log",
-    "has_previous_transaction",
-    "travel_speed_log_kmh",
-    "has_location_velocity",
-    "is_new_device",
+MAX_PAYER_HISTORY = 30
+DIRECTIONAL_RISK_NAMES = (
+    "amount_increase",
+    "shorter_transaction_interval",
+    "higher_travel_speed",
+    "new_device",
 )
+_NEW_DEVICE_RISK = 0.4
+
+
+class _DirectionalFeatures(TypedDict):
+    amount_log_reais: float
+    hours_since_last_transaction_log: float | None
+    travel_speed_log_kmh: float | None
 
 
 class BehaviorObservation(NamedTuple):
@@ -30,45 +32,37 @@ class BehaviorObservation(NamedTuple):
     longitude: float | None
 
 
+class DirectionalRiskScore(NamedTuple):
+    score: float
+    signals: dict[str, float]
+
+
 def _features_for_observation(
     observation: BehaviorObservation,
     previous_observations: list[BehaviorObservation],
-) -> np.ndarray:
-    hour = (
-        observation.transaction_date.hour
-        + observation.transaction_date.minute / 60
-        + observation.transaction_date.second / 3600
-        + observation.transaction_date.microsecond / 3_600_000_000
-    )
-    time_of_day_block_hour = math.floor(hour / 6) * 6 + 3
-    angle = 2 * math.pi * time_of_day_block_hour / 24
+) -> _DirectionalFeatures:
     previous_observation = previous_observations[-1] if previous_observations else None
-    hours_since_last_transaction = (
-        math.floor(
+    hours_since_last_transaction = None
+    if previous_observation is not None:
+        elapsed_minutes = math.floor(
             max(
                 0.0,
                 (
-                    observation.transaction_date
-                    - previous_observation.transaction_date
+                    observation.transaction_date - previous_observation.transaction_date
                 ).total_seconds(),
             )
-            / 60,
+            / 60
         )
-        / 60
-        if previous_observation is not None
-        else 0.0
-    )
+        hours_since_last_transaction = math.log1p(elapsed_minutes / 60)
+
     location_speed = None
     if observation.latitude is not None and observation.longitude is not None:
-        previous_location = next(
-            (
-                item
-                for item in reversed(previous_observations)
-                if item.latitude is not None and item.longitude is not None
-            ),
-            None,
-        )
-        if previous_location is not None:
+        for previous_location in reversed(previous_observations):
+            if (
+                previous_location.latitude is None
+                or previous_location.longitude is None
+            ):
+                continue
             movement = calculate_location_speed_kmh(
                 previous_latitude=previous_location.latitude,
                 previous_longitude=previous_location.longitude,
@@ -79,70 +73,156 @@ def _features_for_observation(
             )
             if movement is not None:
                 _, location_speed = movement
+            break
 
-    device_seen = any(
-        item.device_id == observation.device_id for item in previous_observations
+    return {
+        "amount_log_reais": math.log1p(observation.amount_cents / 100),
+        "hours_since_last_transaction_log": hours_since_last_transaction,
+        "travel_speed_log_kmh": (
+            math.log1p(location_speed) if location_speed is not None else None
+        ),
+    }
+
+
+def _upper_directional_risk(reference: list[float], current: float) -> float:
+    center = float(np.median(reference))
+    if current <= center:
+        return 0.0
+
+    deviations = np.abs(np.asarray(reference, dtype=np.float64) - center)
+    spread = max(
+        1.4826 * float(np.median(deviations)),
+        float(np.std(reference)) * 0.25,
+        0.02,
     )
-    return np.asarray(
-        [
-            math.log1p(observation.amount_cents / 100),
-            math.sin(angle),
-            math.cos(angle),
-            math.log1p(hours_since_last_transaction),
-            float(previous_observation is not None),
-            math.log1p(location_speed or 0),
-            float(location_speed is not None),
-            float(bool(previous_observations) and not device_seen),
-        ],
-        dtype=np.float64,
+    directional_z_score = (current - center) / spread
+    return float(1 / (1 + math.exp(-2 * (directional_z_score - 2))))
+
+
+def _lower_directional_risk(reference: list[float], current: float) -> float:
+    center = float(np.median(reference))
+    if current >= center:
+        return 0.0
+
+    deviations = np.abs(np.asarray(reference, dtype=np.float64) - center)
+    spread = max(
+        1.4826 * float(np.median(deviations)),
+        float(np.std(reference)) * 0.25,
+        0.02,
     )
+    directional_z_score = (center - current) / spread
+    return float(1 / (1 + math.exp(-2 * (directional_z_score - 2))))
 
 
-def _history_matrix(
+def _combine_directional_risks(signals: dict[str, float]) -> float:
+    return float(1 - math.prod(1 - score for score in signals.values()))
+
+
+def _score_directional_behavior(
+    history_features: list[_DirectionalFeatures],
+    current_features: _DirectionalFeatures,
+    is_new_device: bool,
+) -> DirectionalRiskScore:
+    amount_history = [features["amount_log_reais"] for features in history_features]
+    interval_history = [
+        value
+        for features in history_features
+        if (value := features["hours_since_last_transaction_log"]) is not None
+    ]
+    speed_history = [
+        value
+        for features in history_features
+        if (value := features["travel_speed_log_kmh"]) is not None
+    ]
+
+    current_interval = current_features["hours_since_last_transaction_log"]
+    current_speed = current_features["travel_speed_log_kmh"]
+    signals = {
+        "amount_increase": _upper_directional_risk(
+            amount_history,
+            current_features["amount_log_reais"],
+        ),
+        "shorter_transaction_interval": (
+            _lower_directional_risk(interval_history, current_interval)
+            if interval_history and current_interval is not None
+            else 0.0
+        ),
+        "higher_travel_speed": (
+            _upper_directional_risk(speed_history, current_speed)
+            if speed_history and current_speed is not None
+            else 0.0
+        ),
+        "new_device": _NEW_DEVICE_RISK if is_new_device else 0.0,
+    }
+    return DirectionalRiskScore(_combine_directional_risks(signals), signals)
+
+
+def evaluate_payer_behavior(
     history: list[BehaviorObservation],
-) -> tuple[np.ndarray, list[BehaviorObservation]]:
+    current: BehaviorObservation,
+) -> DirectionalRiskScore | None:
+    if len(history) < MIN_PAYER_HISTORY:
+        return None
+
     ordered_history = sorted(history, key=lambda item: item.transaction_date)[
         -MAX_PAYER_HISTORY:
     ]
-    rows = [
+    history_features = [
         _features_for_observation(observation, ordered_history[:index])
         for index, observation in enumerate(ordered_history)
     ]
-    return np.asarray(rows, dtype=np.float64), ordered_history
-
-
-def _score_isolation_forest(
-    training_features: np.ndarray, current_features: np.ndarray
-) -> float:
-    model = IsolationForest(
-        n_estimators=100,
-        contamination="auto",
-        random_state=42,
+    current_features = _features_for_observation(current, ordered_history)
+    known_devices = {observation.device_id for observation in ordered_history}
+    return _score_directional_behavior(
+        history_features,
+        current_features,
+        is_new_device=current.device_id not in known_devices,
     )
-    model.fit(training_features)
-
-    training_normality = model.decision_function(training_features)
-    current_normality = float(
-        model.decision_function(current_features.reshape(1, -1))[0]
-    )
-    median_normality = float(np.median(training_normality))
-    mad = float(np.median(np.abs(training_normality - median_normality)))
-    spread = max(1.4826 * mad, float(np.std(training_normality)) * 0.25, 0.02)
-    anomaly_z_score = (median_normality - current_normality) / spread
-    anomaly_z_score = float(np.clip(anomaly_z_score, -20, 20))
-    return float(1 / (1 + math.exp(-2 * (anomaly_z_score - 2))))
 
 
 def score_payer_behavior(
     history: list[BehaviorObservation],
     current: BehaviorObservation,
 ) -> float | None:
-    if len(history) < MIN_PAYER_HISTORY:
+    result = evaluate_payer_behavior(history, current)
+    return result.score if result is not None else None
+
+
+def evaluate_global_behavior(
+    history: list[tuple[str, BehaviorObservation]],
+    current_payer: str,
+    current: BehaviorObservation,
+    current_payer_history: list[BehaviorObservation] | None = None,
+) -> DirectionalRiskScore | None:
+    if len(history) < MIN_GLOBAL_HISTORY:
         return None
 
-    training_features, ordered_history = _history_matrix(history)
-    current_features = _features_for_observation(current, ordered_history)
-    return _score_isolation_forest(training_features, current_features)
+    payer_histories: dict[str, list[BehaviorObservation]] = {}
+    history_features = []
+    for payer, observation in sorted(
+        history, key=lambda item: item[1].transaction_date
+    ):
+        payer_history = payer_histories.setdefault(payer, [])
+        history_features.append(
+            _features_for_observation(observation, payer_history[-MAX_PAYER_HISTORY:])
+        )
+        payer_history.append(observation)
+
+    current_history = current_payer_history
+    if current_history is None:
+        current_history = payer_histories.get(current_payer, [])
+    current_history = sorted(current_history, key=lambda item: item.transaction_date)[
+        -MAX_PAYER_HISTORY:
+    ]
+    current_features = _features_for_observation(current, current_history)
+    known_devices = {observation.device_id for observation in current_history}
+    return _score_directional_behavior(
+        history_features,
+        current_features,
+        is_new_device=(
+            bool(current_history) and current.device_id not in known_devices
+        ),
+    )
 
 
 def score_global_behavior(
@@ -150,19 +230,5 @@ def score_global_behavior(
     current_payer: str,
     current: BehaviorObservation,
 ) -> float | None:
-    if len(history) < MIN_GLOBAL_HISTORY:
-        return None
-
-    payer_histories: dict[str, list[BehaviorObservation]] = {}
-    training_rows = []
-    for payer, observation in history:
-        previous = payer_histories.setdefault(payer, [])
-        training_rows.append(_features_for_observation(observation, previous))
-        previous.append(observation)
-
-    current_features = _features_for_observation(
-        current, payer_histories.get(current_payer, [])
-    )
-    return _score_isolation_forest(
-        np.asarray(training_rows, dtype=np.float64), current_features
-    )
+    result = evaluate_global_behavior(history, current_payer, current)
+    return result.score if result is not None else None

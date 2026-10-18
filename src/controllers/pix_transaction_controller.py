@@ -11,10 +11,10 @@ from constants import (
     PIX_TWO_FACTOR_THRESHOLD,
 )
 from behavior_model import (
-    ANOMALY_FEATURE_NAMES,
     BehaviorObservation,
-    score_global_behavior,
-    score_payer_behavior,
+    DIRECTIONAL_RISK_NAMES,
+    evaluate_global_behavior,
+    evaluate_payer_behavior,
 )
 from controllers.base_controller import BaseController
 from dtos import PixTransactionDTO
@@ -182,8 +182,14 @@ class PixTransactionController(BaseController):
                 transaction_date=transaction_date,
             )
         ]
-        fraud_score = score_payer_behavior(behavior_history, current_observation)
-        if fraud_score is not None:
+        behavior_result = evaluate_payer_behavior(
+            behavior_history,
+            current_observation,
+        )
+        behavior_risk_signals = {}
+        if behavior_result is not None:
+            fraud_score = behavior_result.score
+            behavior_risk_signals = behavior_result.signals
             model_layer = "payer_behavior_anomaly"
             score_source = "payer_approved_history"
             model_history_count = len(behavior_history)
@@ -206,12 +212,15 @@ class PixTransactionController(BaseController):
                 )
                 for payer, amount, date, historical_device_id, latitude, longitude in global_history
             ]
-            fraud_score = score_global_behavior(
+            behavior_result = evaluate_global_behavior(
                 global_observations,
                 current_payer=source_document_number,
                 current=current_observation,
+                current_payer_history=behavior_history,
             )
-            if fraud_score is not None:
+            if behavior_result is not None:
+                fraud_score = behavior_result.score
+                behavior_risk_signals = behavior_result.signals
                 model_layer = "global_behavior_anomaly"
                 score_source = "global_approved_history"
                 model_history_count = len(global_history)
@@ -249,7 +258,8 @@ class PixTransactionController(BaseController):
             "behavior_model": {
                 "scope": model_layer,
                 "history_transactions": model_history_count,
-                "feature_names": list(ANOMALY_FEATURE_NAMES),
+                "risk_signal_names": list(DIRECTIONAL_RISK_NAMES),
+                "risk_signals": behavior_risk_signals,
             },
         }
         if location_velocity is not None:

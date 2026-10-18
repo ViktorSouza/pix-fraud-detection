@@ -13,14 +13,18 @@ payload recebido ficam persistidos; `GET /pix/transaction/{id}` recupera
 a decisão gravada. Não há consulta externa nem análise manual no caminho
 da decisão.
 
-O motor calcula `metadata.fraud_score` (0 a 1) como um indicador de
-anomalia comportamental. Quando o pagador tem histórico aprovado
-suficiente, um Isolation Forest compara a transação atual com até 200
-transações anteriores daquela pessoa. Com pouco histórico individual,
-usa um perfil comportamental global das transações aprovadas; se ainda
-não houver dados globais suficientes, usa o classificador PaySim como
-fallback. Regras determinísticas continuam podendo escalar a decisão e
-os vetos de limite continuam rejeitando.
+O motor calcula `metadata.fraud_score` (0 a 1) como um indicador de risco
+comportamental direcional. Com histórico aprovado suficiente, compara os
+sinais da transação com até 300 transações anteriores do pagador; com
+pouco histórico individual, usa distribuições direcionais globais de
+transações aprovadas; sem histórico global suficiente, usa o classificador
+PaySim como fallback. No modelo comportamental, valores maiores, intervalos
+menores, velocidades geográficas maiores e aparelho novo podem elevar o
+risco. Valores menores, intervalos maiores e velocidades menores são
+neutros: não aumentam nem compensam sinais suspeitos. Horário incomum, por
+si só, também não altera esse score. Os sinais positivos são combinados
+sem que um sinal benigno cancele outro. Regras determinísticas continuam
+podendo escalar a decisão e os vetos de limite continuam rejeitando.
 
 ### Treinar e habilitar o modelo acadêmico
 
@@ -63,21 +67,21 @@ Como `geolocation` é opcional, a regra não roda se qualquer uma das duas
 transações não tiver coordenadas. É um sinal experimental: GPS impreciso,
 spoofing ou localização compartilhada não são tratados.
 
-O modelo individual é não supervisionado: não prevê o recebedor nem
-precisa de rótulos de fraude para aprender o padrão do pagador. Ele usa
-valor, período aproximado do dia, intervalo desde a transação anterior, velocidade estimada
-entre localizações conhecidas e novidade do aparelho. O intervalo é
-medido em horas, com precisão de um minuto, e transformado com `log1p`
-para reduzir a influência de pausas muito longas; o período do dia é
-agrupado em blocos de seis horas para evitar que segundos de diferença
-em uma rajada de Pix pareçam um comportamento completamente novo. A
-presença/ausência de transação anterior também é um atributo separado. O
-destinatário é excluído do modelo individual;
-novidade de destino continua coberta por uma regra determinística. Só
-transações aprovadas entram no histórico. O perfil individual requer pelo
-menos 50 registros; antes disso, a API tenta usar até 200 transações
-aprovadas de outros pagadores (com mínimo de 200 no conjunto) como
-fallback global.
+O modelo comportamental não prevê o recebedor nem precisa de rótulos de
+fraude. Ele mede separadamente quatro sinais: aumento do valor, redução
+do intervalo entre transações, aumento da velocidade entre localizações
+e uso de aparelho não visto no histórico. Os três primeiros comparam a
+direção da mudança com a mediana e a dispersão histórica robusta; o
+intervalo é medido em horas, com precisão de um minuto, e os valores são
+transformados com `log1p`. Cada sinal tem score próprio em
+`metadata.behavior_model.risk_signals`; eles são combinados sem que um
+comportamento benigno (como valor menor ou intervalo maior) cancele um
+sinal de risco. Horário incomum, por si só, não aumenta o score. O
+destinatário é excluído do modelo comportamental; novidade de destino
+continua coberta por regra determinística. Só transações aprovadas entram
+no histórico individual. Esse perfil requer pelo menos 50 registros;
+antes disso, a API compara com distribuições globais, desde que haja ao
+menos 200 transações aprovadas disponíveis.
 
 Anomalia persistente não deve ficar automaticamente mais permissiva só
 porque passou tempo: alguém pode esperar deliberadamente para contornar a
@@ -87,12 +91,18 @@ redução da fricção apenas após um sinal independente de legitimidade, como
 sem validação podem aumentar a fricção ou acionar limites de tentativas,
 em vez de reduzir o risco pelo simples decurso do tempo.
 
-`fraud_score` é um score de anomalia normalizado, não a probabilidade de
-fraude. Um valor alto quer dizer que a observação se afasta do padrão
-aprendido pelo modelo selecionado; pode ser uma atividade legítima
-atípica. Os limiares `PIX_TWO_FACTOR_THRESHOLD` e `PIX_REJECT_THRESHOLD`
-transformam esse score em 2FA/rejeição e devem ser calibrados para reduzir
-falsos positivos antes de qualquer uso real.
+`fraud_score` é um score de risco direcional normalizado, não a
+probabilidade de fraude. Um valor alto quer dizer que um ou mais sinais
+suspeitos se afastam do padrão; ainda pode ser uma atividade legítima.
+Os limiares `PIX_TWO_FACTOR_THRESHOLD` e `PIX_REJECT_THRESHOLD` transformam
+esse score em 2FA/rejeição e devem ser calibrados para reduzir falsos
+positivos antes de qualquer uso real. Essa lógica direcional vale para os
+modelos comportamentais; sem histórico comportamental suficiente, o
+classificador PaySim (ou um classificador Pix rotulado configurado) ainda
+calcula seu score supervisionado próprio. Se o histórico individual não
+atingir 50 registros, o modelo global não infere novidade de aparelho sem
+histórico conhecido do pagador. Regras fixas de risco, como teto de valor e
+velocidade de transações, continuam valendo independentemente do modelo.
 
 A API registra em `metadata.model_features` os sinais derivados no
 servidor, úteis para treinamento supervisionado futuro. O classificador
@@ -206,16 +216,18 @@ Resposta:
     "behavior_model": {
       "scope": "payer_behavior_anomaly",
       "history_transactions": 42,
-      "feature_names": [
-        "amount_log_reais",
-        "time_of_day_sin",
-        "time_of_day_cos",
-        "hours_since_last_transaction_log",
-        "has_previous_transaction",
-        "travel_speed_log_kmh",
-        "has_location_velocity",
-        "is_new_device"
-      ]
+      "risk_signal_names": [
+        "amount_increase",
+        "shorter_transaction_interval",
+        "higher_travel_speed",
+        "new_device"
+      ],
+      "risk_signals": {
+        "amount_increase": 0.0,
+        "shorter_transaction_interval": 0.0,
+        "higher_travel_speed": 0.0,
+        "new_device": 0.4
+      }
     }
   }
 }
