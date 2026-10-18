@@ -139,7 +139,62 @@ class TestPixTransaction:
             "amount_tolerance_percent": 25,
             "amount_requires_confirmation_suppressed": True,
             "behavior_amount_increase_suppressed": False,
+            "high_transaction_velocity_suppressed": False,
         }
+
+    def test_recent_two_factor_suppresses_high_velocity_on_same_device(self):
+        now = datetime.now(timezone.utc)
+        first = PayloadGenerator.create_pix_transaction_payload(
+            amount=1_000,
+            transaction_date=now - timedelta(minutes=9),
+        )
+        setup_approved = True
+        for minutes_ago in (9, 6, 3):
+            payload = PayloadGenerator.create_pix_transaction_payload(
+                amount=1_000,
+                transaction_date=now - timedelta(minutes=minutes_ago),
+                source_document_number=first["source_account"]["owner"]["document_number"],
+                destination_account_number=first["destination_account"]["account_number"],
+                device_id=first["source"]["device_id"],
+            )
+            status, response = RequestGenerator.POST_pix_transaction(payload)
+            assert status == 200
+            setup_approved = setup_approved and response["status"] == "approved"
+
+        if not setup_approved:
+            pytest.skip("The configured model did not approve the velocity setup.")
+
+        challenge = PayloadGenerator.create_pix_transaction_payload(
+            amount=1_000,
+            transaction_date=now,
+            source_document_number=first["source_account"]["owner"]["document_number"],
+            destination_account_number=first["destination_account"]["account_number"],
+            device_id=first["source"]["device_id"],
+        )
+        status, analysis = RequestGenerator.POST_pix_transaction(challenge)
+        assert status == 200
+        if analysis["status"] != "two_factor_required":
+            pytest.skip("The configured model did not leave the velocity challenge pending.")
+        assert "high_transaction_velocity" in analysis["metadata"]["reasons"]
+
+        status, verified = RequestGenerator.POST_verify_pix_two_factor(challenge["id"])
+        assert status == 200
+        assert verified["status"] == "approved"
+
+        next_transaction = PayloadGenerator.create_pix_transaction_payload(
+            amount=1_000,
+            transaction_date=now + timedelta(minutes=1),
+            source_document_number=first["source_account"]["owner"]["document_number"],
+            destination_account_number=first["destination_account"]["account_number"],
+            device_id=first["source"]["device_id"],
+        )
+        status, response = RequestGenerator.POST_pix_transaction(next_transaction)
+
+        assert status == 200
+        assert "high_transaction_velocity" not in response["metadata"]["reasons"]
+        assert response["metadata"]["two_factor_amortization"][
+            "high_transaction_velocity_suppressed"
+        ]
 
     def test_two_factor_verification_returns_not_found_for_unknown_transaction(self):
         status, response = RequestGenerator.POST_verify_pix_two_factor(

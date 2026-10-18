@@ -125,7 +125,10 @@ class PixTransactionController(BaseController):
         ):
             two_factor_reasons.append("destination_account_is_new")
 
-        if velocity_count >= VELOCITY_TRANSACTION_LIMIT:
+        if (
+            velocity_count >= VELOCITY_TRANSACTION_LIMIT
+            and recent_two_factor_amount is None
+        ):
             two_factor_reasons.append("high_transaction_velocity")
 
         if previous_count and not destination_seen:
@@ -290,17 +293,25 @@ class PixTransactionController(BaseController):
         }
         if location_velocity is not None:
             metadata["location_velocity"] = location_velocity
-        if amount_matches_recent_two_factor:
+        if recent_two_factor_amount is not None and (
+            amount_matches_recent_two_factor
+            or velocity_count >= VELOCITY_TRANSACTION_LIMIT
+        ):
             metadata["two_factor_amortization"] = {
                 "confirmed_amount_cents": recent_two_factor_amount,
                 "window_minutes": TWO_FACTOR_AMOUNT_WINDOW_MINUTES,
                 "amount_tolerance_percent": CONFIRMED_AMOUNT_TOLERANCE_PERCENT,
                 "amount_requires_confirmation_suppressed": (
                     transaction_data["amount"] >= TWO_FACTOR_AMOUNT_CENTS
+                    and amount_matches_recent_two_factor
                 ),
                 "behavior_amount_increase_suppressed": (
-                    behavior_result is not None
+                    amount_matches_recent_two_factor
+                    and behavior_result is not None
                     and behavior_result.signals["amount_increase"] == 0
+                ),
+                "high_transaction_velocity_suppressed": (
+                    velocity_count >= VELOCITY_TRANSACTION_LIMIT
                 ),
             }
 
