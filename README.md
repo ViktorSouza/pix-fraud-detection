@@ -354,6 +354,21 @@ pytest
 
 No Windows, ative o ambiente com `.venv\Scripts\activate`.
 
+### Métricas locais de desempenho
+
+Com a API e o banco ativos, rode um benchmark HTTP do endpoint de análise Pix:
+
+```bash
+python3 scripts/benchmark_api.py --requests 100 --concurrency 5
+```
+
+O script informa latências p50/p95/p99, throughput, taxa de sucesso, códigos
+HTTP e ambiente da máquina. Cada requisição analisa e persiste uma transação
+com ID único; portanto, o teste acrescenta dados ao banco local. Os resultados
+são específicos da máquina e do modo de desenvolvimento do Compose (`--reload`):
+servem como medição reproduzível para apresentação, não como SLA ou garantia
+de desempenho em produção.
+
 ### Banco de dados
 
 O schema inicial está em `database/database.sql` e é aplicado quando o
@@ -385,7 +400,6 @@ do volume; use apenas no banco descartável de desenvolvimento.
 | `POST /pix/transaction` | analisa e persiste um Pix |
 | `GET /pix/transaction/{id}` | consulta análise pelo ID da transação |
 | `POST /pix/transaction/{id}/verify-two-factor` | confirmação mock, somente em desenvolvimento |
-| `/sample_entity` e rotas relacionadas | exemplos herdados do Base Service |
 
 As rotas internas exigem o header `INTERNAL-TOKEN`. A confirmação de 2FA
 em desenvolvimento é apenas um mock: não verifica a identidade do pagador

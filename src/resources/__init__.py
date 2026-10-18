@@ -1,4 +1,3 @@
 from resources.health_check import HealthCheckResource
 from resources.playground import PlaygroundResource
 from resources.pix_transaction import PixTransactionResource
-from resources.sample_entity import SampleEntityResource

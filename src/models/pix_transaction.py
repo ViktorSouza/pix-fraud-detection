@@ -27,9 +27,6 @@ class PixTransaction(Base):
     status = Column(String(32), nullable=False)
     transaction_data = Column(JSONB, nullable=False)
     analysis_metadata = Column("metadata", JSONB, nullable=False)
-    created_at = Column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
-    )
 
     __table_args__ = (
         UniqueConstraint("transaction_id"),
