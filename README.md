@@ -1,4 +1,4 @@
-# Desafio Antifraude Pix — [Nome do grupo]
+# Desafio Antifraude Pix — João Viktor e Antônio Felipe - Grupo 22
 
 **Integrantes:** [nomes]
 
