@@ -442,9 +442,48 @@
 							<div>
 								<label for="example-payer">Pagador</label>
 								<select id="example-payer">
-									<option value="known">Perfil de teste fixo</option>
-									<option value="new">Novo pagador</option>
 								</select>
+								<div class="actions" style="margin-top: 8px">
+									<button
+										class="button button-secondary"
+										id="add-payer-profile-button"
+										type="button">
+										Adicionar perfil
+									</button>
+								</div>
+							</div>
+							<div
+								id="new-payer-profile"
+								class="hidden">
+								<label for="new-payer-profile-name">Nome do perfil</label>
+								<input
+									id="new-payer-profile-name"
+									type="text"
+									maxlength="60"
+									autocomplete="off"
+									placeholder="Ex.: Maria - conta pessoal" />
+							</div>
+							<div
+								id="new-payer-profile-document"
+								class="hidden">
+								<label for="new-payer-document-number">CPF do perfil</label>
+								<input
+									id="new-payer-document-number"
+									type="text"
+									maxlength="14"
+									autocomplete="off"
+									placeholder="000.000.000-00" />
+							</div>
+							<div
+								id="save-payer-profile-control"
+								class="hidden">
+								<label>&nbsp;</label>
+								<button
+									class="button button-primary"
+									id="save-payer-profile-button"
+									type="button">
+									Salvar perfil
+								</button>
 							</div>
 							<div>
 								<label for="example-device">Aparelho</label>
@@ -514,8 +553,8 @@
 						</button>
 					</div>
 					<p class="privacy-note">
-						O histórico abaixo guarda apenas IDs e status neste navegador.
-						Nenhuma credencial é salva.
+						Perfis de teste (nome e CPF) e IDs/status recentes ficam salvos
+						somente neste navegador. O token não é armazenado.
 					</p>
 					<p
 						class="error hidden"
@@ -559,12 +598,129 @@
 		<script>
 			const PIX_DEV_MODE = __PIX_DEV_MODE__
 			const HISTORY_KEY = 'pix-fraud-playground-history-v1'
+			const PAYER_PROFILES_KEY = 'pix-fraud-playground-payer-profiles-v1'
+			const DEFAULT_PAYER_PROFILE = {
+				id: 'default-test-profile',
+				name: 'Perfil de teste fixo',
+				documentNumber: '159.357.246-80',
+			}
 			const payloadInput = document.querySelector('#payload')
 			const tokenInput = document.querySelector('#token')
 			const result = document.querySelector('#result')
 			const formError = document.querySelector('#form-error')
 			const sendButton = document.querySelector('#send-button')
 			const lookupButton = document.querySelector('#lookup-button')
+
+			function readPayerProfiles() {
+				try {
+					const storedProfiles = localStorage.getItem(PAYER_PROFILES_KEY)
+					if (storedProfiles === null) return [DEFAULT_PAYER_PROFILE]
+					const profiles = JSON.parse(storedProfiles)
+					if (
+						Array.isArray(profiles) &&
+						profiles.every(
+							(profile) =>
+								profile &&
+								typeof profile.id === 'string' &&
+								typeof profile.name === 'string' &&
+								typeof profile.documentNumber === 'string',
+						)
+					) {
+						return [DEFAULT_PAYER_PROFILE, ...profiles]
+					}
+					showError('A lista local de perfis de teste está inválida.')
+				} catch {
+					showError('Não foi possível ler os perfis de teste deste navegador.')
+				}
+				return [DEFAULT_PAYER_PROFILE]
+			}
+
+			function renderPayerProfiles() {
+				const select = document.querySelector('#example-payer')
+				const selectedProfileId = select.value
+				select.replaceChildren()
+				for (const profile of readPayerProfiles()) {
+					const option = document.createElement('option')
+					option.value = profile.id
+					option.textContent = profile.name
+					select.append(option)
+				}
+				const randomOption = document.createElement('option')
+				randomOption.value = 'new'
+				randomOption.textContent = 'Novo pagador aleatório'
+				select.append(randomOption)
+				if ([...select.options].some((option) => option.value === selectedProfileId)) {
+					select.value = selectedProfileId
+				}
+			}
+
+			function validatePayerDocument(value) {
+				if (!/^\d{3}\.\d{3}\.\d{3}-\d{2}$/.test(value)) {
+					throw new Error('Informe o CPF no formato 000.000.000-00.')
+				}
+			}
+
+			function addPayerProfile() {
+				const name = document
+					.querySelector('#new-payer-profile-name')
+					.value.trim()
+				const documentNumber = document
+					.querySelector('#new-payer-document-number')
+					.value.trim()
+				if (!name) {
+					showError('Informe um nome para identificar o perfil.')
+					return
+				}
+				try {
+					validatePayerDocument(documentNumber)
+				} catch (error) {
+					showError(error.message)
+					return
+				}
+
+				const profiles = readPayerProfiles().filter(
+					(profile) => profile.id !== DEFAULT_PAYER_PROFILE.id,
+				)
+				if (
+					[DEFAULT_PAYER_PROFILE, ...profiles].some(
+						(profile) =>
+							profile.documentNumber === documentNumber ||
+							profile.name.toLocaleLowerCase() === name.toLocaleLowerCase(),
+					)
+				) {
+					showError('Já existe um perfil com esse nome ou CPF.')
+					return
+				}
+
+				const profile = {
+					id: crypto.randomUUID(),
+					name,
+					documentNumber,
+				}
+				try {
+					localStorage.setItem(
+						PAYER_PROFILES_KEY,
+						JSON.stringify([...profiles, profile]),
+					)
+				} catch {
+					showError('Não foi possível salvar o perfil neste navegador.')
+					return
+				}
+				renderPayerProfiles()
+				document.querySelector('#example-payer').value = profile.id
+				document.querySelector('#new-payer-profile-name').value = ''
+				document.querySelector('#new-payer-document-number').value = ''
+				document
+					.querySelector('#new-payer-profile')
+					.classList.add('hidden')
+				document
+					.querySelector('#new-payer-profile-document')
+					.classList.add('hidden')
+				document
+					.querySelector('#save-payer-profile-control')
+					.classList.add('hidden')
+				clearError()
+			}
 
 			function randomCpfLikeDocument() {
 				const digits = String(
@@ -577,8 +733,11 @@
 				const now = new Date()
 				const date = (daysAgo) =>
 					new Date(now.getTime() - daysAgo * 86400000).toISOString()
-				const isNewPayer =
-					document.querySelector('#example-payer').value === 'new'
+				const payerProfileId = document.querySelector('#example-payer').value
+				const isNewPayer = payerProfileId === 'new'
+				const payerProfile = readPayerProfiles().find(
+					(profile) => profile.id === payerProfileId,
+				)
 				const isNewDevice =
 					document.querySelector('#example-device').value === 'new'
 				const isNewLocation =
@@ -603,7 +762,7 @@
 						owner: {
 							document_number: isNewPayer
 								? randomCpfLikeDocument()
-								: '159.357.246-80',
+								: payerProfile.documentNumber,
 						},
 					},
 					destination_account: {
@@ -904,8 +1063,36 @@
 						showError(error.message)
 					}
 				})
+			document
+				.querySelector('#add-payer-profile-button')
+				.addEventListener('click', () => {
+					document
+						.querySelector('#new-payer-profile')
+						.classList.remove('hidden')
+					document
+						.querySelector('#new-payer-profile-document')
+						.classList.remove('hidden')
+					document
+						.querySelector('#save-payer-profile-control')
+						.classList.remove('hidden')
+					document.querySelector('#new-payer-profile-name').focus()
+				})
+			document
+				.querySelector('#save-payer-profile-button')
+				.addEventListener('click', addPayerProfile)
+			document
+				.querySelector('#example-payer')
+				.addEventListener('change', () => {
+					try {
+						payloadInput.value = JSON.stringify(createExample(), null, 2)
+						clearError()
+					} catch (error) {
+						showError(error.message)
+					}
+				})
 			sendButton.addEventListener('click', submitTransaction)
 			lookupButton.addEventListener('click', () => lookupAnalysis())
+			renderPayerProfiles()
 			payloadInput.value = JSON.stringify(createExample(), null, 2)
 			renderHistory()
 		</script>

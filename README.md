@@ -269,8 +269,11 @@ docker compose up
 Com a API no ar, abra [http://localhost:3000/playground](http://localhost:3000/playground)
 para usar a interface local: informe o `INTERNAL-TOKEN`, edite ou envie um
 payload de exemplo, escolha valor, pagador, aparelho, destino e idade da
-conta recebedora, veja o score e consulte análises existentes pelo ID. O
-perfil de teste fixo usa os mesmos identificadores a cada exemplo; envie
+conta recebedora, veja o score e consulte análises existentes pelo ID. Na
+lista de pagadores, escolha o perfil de teste fixo ou adicione perfis com
+nome e CPF para identificar as pessoas simuladas; eles ficam salvos somente
+neste navegador. Também é possível gerar um pagador aleatório. Cada perfil
+usa seus próprios dados de histórico; envie
 primeiro uma transação aprovada e, nas seguintes, o banco poderá reconhecer
 o aparelho e o destino usados nesse histórico recente.
 O token fica somente na memória da página; a lista de IDs recentes é salva

@@ -30,6 +30,10 @@ class TestHealthCheck:
         assert response.response.headers["content-type"].startswith("text/html")
         assert b"Pix Fraud Playground" in response.response_content
         assert b'for="example-payer"' in response.response_content
+        assert b'id="add-payer-profile-button"' in response.response_content
+        assert b'for="new-payer-profile-name"' in response.response_content
+        assert b'for="new-payer-document-number"' in response.response_content
+        assert b'id="save-payer-profile-button"' in response.response_content
         assert b'for="example-device"' in response.response_content
         assert b'for="example-location"' in response.response_content
         assert b'for="example-destination"' in response.response_content
