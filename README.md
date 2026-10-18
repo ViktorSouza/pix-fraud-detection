@@ -1,6 +1,6 @@
-# Desafio Antifraude Pix — João Viktor e Antônio Felipe - Grupo 22
+# Desafio Antifraude Pix - Grupo 22
 
-**Integrantes:** [nomes]
+**Integrantes:** João Viktor e Antônio Felipe
 
 API REST em **Python + FastAPI** e **PostgreSQL**, construída a partir do
 Base Service do Bootcamp QI Tech.
