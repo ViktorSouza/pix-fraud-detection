@@ -1,0 +1,1100 @@
+<!doctype html>
+<html lang="pt-BR">
+	<head>
+		<meta charset="utf-8" />
+		<meta
+			name="viewport"
+			content="width=device-width, initial-scale=1" />
+		<meta
+			name="theme-color"
+			content="#101a2c" />
+		<title>Pix Fraud Playground</title>
+		<style>
+			:root {
+				color-scheme: dark;
+				font-family:
+					Inter,
+					ui-sans-serif,
+					system-ui,
+					-apple-system,
+					BlinkMacSystemFont,
+					'Segoe UI',
+					sans-serif;
+				background: #101a2c;
+				color: #e8edf7;
+				font-synthesis: none;
+				text-rendering: optimizeLegibility;
+				--muted: #9eabc0;
+				--surface: #18253a;
+				--surface-raised: #1d2c43;
+				--border: #31415a;
+				--accent: #8b9cff;
+				--green: #59d6a5;
+				--yellow: #ffd166;
+				--red: #ff7884;
+			}
+
+			* {
+				box-sizing: border-box;
+			}
+			body {
+				margin: 0;
+				min-width: 320px;
+			}
+			button,
+			input,
+			textarea {
+				font: inherit;
+			}
+			button {
+				cursor: pointer;
+			}
+
+			.shell {
+				width: min(1100px, calc(100% - 32px));
+				margin: 0 auto;
+				padding: 42px 0 64px;
+			}
+			header {
+				display: flex;
+				justify-content: space-between;
+				gap: 24px;
+				align-items: flex-start;
+				margin-bottom: 26px;
+			}
+			.eyebrow {
+				color: var(--accent);
+				font-size: 12px;
+				font-weight: 700;
+				letter-spacing: 0.12em;
+				text-transform: uppercase;
+			}
+			h1 {
+				margin: 8px 0;
+				font-size: clamp(28px, 5vw, 38px);
+				letter-spacing: -0.04em;
+			}
+			h2 {
+				margin: 0 0 16px;
+				font-size: 17px;
+			}
+			p {
+				color: var(--muted);
+				line-height: 1.55;
+			}
+			header p {
+				margin: 0;
+				max-width: 650px;
+			}
+			.badge {
+				flex: 0 0 auto;
+				border: 1px solid var(--border);
+				border-radius: 999px;
+				padding: 8px 12px;
+				color: var(--muted);
+				font-size: 12px;
+			}
+
+			.grid {
+				display: grid;
+				grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.7fr);
+				gap: 18px;
+				align-items: start;
+			}
+			.card {
+				background: var(--surface);
+				border: 1px solid var(--border);
+				border-radius: 16px;
+				padding: 22px;
+				box-shadow: 0 12px 36px #07101d33;
+			}
+			.card + .card {
+				margin-top: 18px;
+			}
+			.form-row {
+				display: grid;
+				grid-template-columns: 1fr 1fr;
+				gap: 12px;
+				margin-bottom: 14px;
+			}
+			.generator {
+				margin: 18px 0;
+				border: 1px solid var(--border);
+				border-radius: 11px;
+				background: #111c2e80;
+				padding: 14px;
+			}
+			.generator-title {
+				margin: 0 0 12px;
+				color: #dbe3f0;
+				font-size: 13px;
+				font-weight: 700;
+			}
+			.generator-grid {
+				display: grid;
+				grid-template-columns: repeat(2, minmax(0, 1fr));
+				gap: 12px;
+			}
+			label {
+				display: block;
+				margin-bottom: 7px;
+				color: #c6d0e0;
+				font-size: 13px;
+				font-weight: 600;
+			}
+			input,
+			textarea,
+			select {
+				width: 100%;
+				border: 1px solid var(--border);
+				border-radius: 9px;
+				background: #111c2e;
+				color: #e8edf7;
+				padding: 11px 12px;
+				outline: none;
+			}
+			input:focus,
+			textarea:focus {
+				border-color: var(--accent);
+				box-shadow: 0 0 0 3px #8b9cff22;
+			}
+			select:focus {
+				border-color: var(--accent);
+				box-shadow: 0 0 0 3px #8b9cff22;
+			}
+			input::placeholder {
+				color: #68788f;
+			}
+			textarea {
+				min-height: 330px;
+				resize: vertical;
+				font:
+					12px/1.55 ui-monospace,
+					SFMono-Regular,
+					Consolas,
+					monospace;
+				tab-size: 2;
+			}
+			.hint {
+				margin: 6px 0 0;
+				color: var(--muted);
+				font-size: 12px;
+			}
+			.actions {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 10px;
+				margin-top: 16px;
+			}
+			.button {
+				border: 0;
+				border-radius: 9px;
+				padding: 10px 14px;
+				font-weight: 700;
+			}
+			.button-primary {
+				background: var(--accent);
+				color: #11182c;
+			}
+			.button-secondary {
+				border: 1px solid var(--border);
+				background: var(--surface-raised);
+				color: #e8edf7;
+			}
+			.button:disabled {
+				opacity: 0.55;
+				cursor: wait;
+			}
+			.privacy-note {
+				margin: 13px 0 0;
+				font-size: 12px;
+			}
+
+			.result-empty {
+				color: var(--muted);
+				font-size: 14px;
+			}
+			.result-top {
+				display: flex;
+				justify-content: space-between;
+				align-items: flex-start;
+				gap: 14px;
+			}
+			.status {
+				display: inline-flex;
+				border-radius: 999px;
+				padding: 6px 10px;
+				background: #ffffff10;
+				font-size: 12px;
+				font-weight: 800;
+			}
+			.status-approved {
+				color: var(--green);
+				background: #59d6a51b;
+			}
+			.status-two_factor_required {
+				color: var(--yellow);
+				background: #ffd1661b;
+			}
+			.status-rejected {
+				color: var(--red);
+				background: #ff78841b;
+			}
+			.score {
+				margin: 16px 0 6px;
+				font-size: 34px;
+				font-weight: 800;
+				letter-spacing: -0.05em;
+			}
+			.score-caption {
+				color: var(--muted);
+				font-size: 12px;
+			}
+			.meter {
+				height: 8px;
+				margin-top: 12px;
+				overflow: hidden;
+				border-radius: 99px;
+				background: #0d1727;
+			}
+			.meter-fill {
+				width: 0;
+				height: 100%;
+				border-radius: inherit;
+				background: var(--green);
+				transition: width 0.25s ease;
+			}
+			.meter-fill.medium {
+				background: var(--yellow);
+			}
+			.meter-fill.high {
+				background: var(--red);
+			}
+			.reasons {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 7px;
+				margin: 16px 0;
+			}
+			.reason {
+				border: 1px solid var(--border);
+				border-radius: 7px;
+				padding: 5px 8px;
+				color: #c6d0e0;
+				font:
+					11px ui-monospace,
+					SFMono-Regular,
+					Consolas,
+					monospace;
+			}
+			.result-meta {
+				color: var(--muted);
+				font-size: 12px;
+				overflow-wrap: anywhere;
+			}
+			pre {
+				max-height: 240px;
+				overflow: auto;
+				margin: 14px 0 0;
+				border-radius: 9px;
+				background: #111c2e;
+				padding: 12px;
+				color: #cbd5e5;
+				font-size: 11px;
+				line-height: 1.5;
+				white-space: pre-wrap;
+				overflow-wrap: anywhere;
+			}
+
+			.history-list {
+				display: grid;
+				gap: 8px;
+			}
+			.history-item {
+				display: flex;
+				justify-content: space-between;
+				align-items: center;
+				gap: 10px;
+				width: 100%;
+				border: 1px solid var(--border);
+				border-radius: 9px;
+				background: var(--surface-raised);
+				color: #e8edf7;
+				padding: 10px;
+				text-align: left;
+			}
+			.history-id {
+				min-width: 0;
+				overflow: hidden;
+				color: #d5ddec;
+				font:
+					11px ui-monospace,
+					SFMono-Regular,
+					Consolas,
+					monospace;
+				text-overflow: ellipsis;
+			}
+			.history-status {
+				flex: 0 0 auto;
+				color: var(--muted);
+				font-size: 11px;
+			}
+			.error {
+				margin: 12px 0 0;
+				color: var(--red);
+				font-size: 13px;
+			}
+			.hidden {
+				display: none;
+			}
+			footer {
+				margin-top: 20px;
+				color: var(--muted);
+				font-size: 12px;
+				text-align: center;
+			}
+
+			@media (max-width: 760px) {
+				.shell {
+					padding-top: 26px;
+				}
+				header {
+					display: block;
+				}
+				.badge {
+					display: inline-block;
+					margin-top: 16px;
+				}
+				.grid {
+					grid-template-columns: 1fr;
+				}
+			}
+			@media (max-width: 460px) {
+				.form-row {
+					grid-template-columns: 1fr;
+				}
+				.card {
+					padding: 17px;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<main class="shell">
+			<header>
+				<div>
+					<div class="eyebrow">QI Tech · ferramenta local</div>
+					<h1>Pix Fraud Playground</h1>
+					<p>
+						Envie uma transação para a API, veja a decisão e consulte análises
+						já salvas.
+					</p>
+				</div>
+				<div class="badge">API: <code>/pix/transaction</code></div>
+			</header>
+
+			<div class="grid">
+				<section
+					class="card"
+					aria-labelledby="send-title">
+					<h2 id="send-title">Nova análise</h2>
+					<div class="form-row">
+						<div>
+							<label for="token">INTERNAL-TOKEN</label>
+							<input
+								id="token"
+								type="password"
+								autocomplete="off"
+								placeholder="Informe o token da API"
+								value="default_token" />
+							<p class="hint">Usado nesta página; não é armazenado.</p>
+						</div>
+						<div>
+							<label for="lookup-id">Consultar pelo ID</label>
+							<input
+								id="lookup-id"
+								type="text"
+								placeholder="ID da transação analisada" />
+							<div
+								class="actions"
+								style="margin-top: 8px">
+								<button
+									class="button button-secondary"
+									id="lookup-button"
+									type="button">
+									Buscar análise
+								</button>
+							</div>
+						</div>
+					</div>
+					<div class="generator">
+						<p class="generator-title">Configurar exemplo</p>
+						<div class="generator-grid">
+							<div>
+								<label for="example-amount">Valor (centavos)</label>
+								<input
+									id="example-amount"
+									type="number"
+									min="1"
+									step="1"
+									value="25000" />
+							</div>
+							<div>
+								<label for="example-payer">Pagador</label>
+								<select id="example-payer">
+								</select>
+								<div class="actions" style="margin-top: 8px">
+									<button
+										class="button button-secondary"
+										id="add-payer-profile-button"
+										type="button">
+										Adicionar perfil
+									</button>
+								</div>
+							</div>
+							<div
+								id="new-payer-profile"
+								class="hidden">
+								<label for="new-payer-profile-name">Nome do perfil</label>
+								<input
+									id="new-payer-profile-name"
+									type="text"
+									maxlength="60"
+									autocomplete="off"
+									placeholder="Ex.: Maria - conta pessoal" />
+							</div>
+							<div
+								id="new-payer-profile-document"
+								class="hidden">
+								<label for="new-payer-document-number">CPF do perfil</label>
+								<input
+									id="new-payer-document-number"
+									type="text"
+									maxlength="14"
+									autocomplete="off"
+									placeholder="000.000.000-00" />
+							</div>
+							<div
+								id="save-payer-profile-control"
+								class="hidden">
+								<label>&nbsp;</label>
+								<button
+									class="button button-primary"
+									id="save-payer-profile-button"
+									type="button">
+									Salvar perfil
+								</button>
+							</div>
+							<div>
+								<label for="example-device">Aparelho</label>
+								<select id="example-device">
+									<option value="known">Aparelho conhecido</option>
+									<option value="new">Novo aparelho</option>
+								</select>
+							</div>
+							<div>
+								<label for="example-location">Localização</label>
+								<select id="example-location">
+									<option value="same">Manter endereço atual</option>
+									<option value="new">Mudar endereço</option>
+								</select>
+							</div>
+							<div>
+								<label for="example-destination">Conta de destino</label>
+								<select id="example-destination">
+									<option value="known">Destino conhecido</option>
+									<option value="new">Novo destino</option>
+								</select>
+							</div>
+							<div>
+								<label for="example-destination-age"
+									>Idade da conta de destino</label
+								>
+								<select id="example-destination-age">
+									<option value="old">Antiga (mais de 7 dias)</option>
+									<option value="new">Recente (menos de 7 dias)</option>
+								</select>
+							</div>
+						</div>
+						<p class="hint">
+							Para simular familiaridade, use o perfil, aparelho e destino
+							fixos. A primeira transação precisa ser aprovada para servir de
+							histórico; análises de 2FA ou rejeitadas não criam esse histórico.
+						</p>
+						<p class="hint">
+							“Mudar endereço” troca latitude e longitude no payload. A
+							localização participa da velocidade estimada no perfil
+							comportamental quando há histórico geográfico.
+						</p>
+					</div>
+					<label for="payload">Payload JSON</label>
+					<textarea
+						id="payload"
+						spellcheck="false"
+						aria-describedby="payload-hint"></textarea>
+					<p
+						class="hint"
+						id="payload-hint">
+						Edite o JSON livremente. Valores monetários são enviados em
+						centavos.
+					</p>
+					<div class="actions">
+						<button
+							class="button button-primary"
+							id="send-button"
+							type="button">
+							Analisar transação
+						</button>
+						<button
+							class="button button-secondary"
+							id="example-button"
+							type="button">
+							Gerar novo exemplo
+						</button>
+					</div>
+					<p class="privacy-note">
+						Perfis de teste (nome e CPF) e IDs/status recentes ficam salvos
+						somente neste navegador. O token não é armazenado.
+					</p>
+					<p
+						class="error hidden"
+						id="form-error"
+						role="alert"></p>
+				</section>
+
+				<div>
+					<section
+						class="card"
+						aria-labelledby="result-title">
+						<h2 id="result-title">Resultado</h2>
+						<div
+							id="result"
+							aria-live="polite">
+							<p class="result-empty">
+								Envie uma transação ou busque uma análise pelo ID.
+							</p>
+						</div>
+					</section>
+					<section
+						class="card"
+						aria-labelledby="history-title">
+						<h2 id="history-title">Recentes neste navegador</h2>
+						<div
+							class="history-list"
+							id="history">
+							<p class="result-empty">
+								As análises feitas aqui aparecerão nesta lista.
+							</p>
+						</div>
+					</section>
+				</div>
+			</div>
+			<footer>
+				O score é um indicador de anomalia comportamental, não uma probabilidade
+				calibrada de fraude.
+			</footer>
+		</main>
+
+		<script>
+			const PIX_DEV_MODE = __PIX_DEV_MODE__
+			const HISTORY_KEY = 'pix-fraud-playground-history-v1'
+			const PAYER_PROFILES_KEY = 'pix-fraud-playground-payer-profiles-v1'
+			const DEFAULT_PAYER_PROFILE = {
+				id: 'default-test-profile',
+				name: 'Perfil de teste fixo',
+				documentNumber: '159.357.246-80',
+			}
+			const payloadInput = document.querySelector('#payload')
+			const tokenInput = document.querySelector('#token')
+			const result = document.querySelector('#result')
+			const formError = document.querySelector('#form-error')
+			const sendButton = document.querySelector('#send-button')
+			const lookupButton = document.querySelector('#lookup-button')
+
+			function readPayerProfiles() {
+				try {
+					const storedProfiles = localStorage.getItem(PAYER_PROFILES_KEY)
+					if (storedProfiles === null) return [DEFAULT_PAYER_PROFILE]
+					const profiles = JSON.parse(storedProfiles)
+					if (
+						Array.isArray(profiles) &&
+						profiles.every(
+							(profile) =>
+								profile &&
+								typeof profile.id === 'string' &&
+								typeof profile.name === 'string' &&
+								typeof profile.documentNumber === 'string',
+						)
+					) {
+						return [DEFAULT_PAYER_PROFILE, ...profiles]
+					}
+					showError('A lista local de perfis de teste está inválida.')
+				} catch {
+					showError('Não foi possível ler os perfis de teste deste navegador.')
+				}
+				return [DEFAULT_PAYER_PROFILE]
+			}
+
+			function renderPayerProfiles() {
+				const select = document.querySelector('#example-payer')
+				const selectedProfileId = select.value
+				select.replaceChildren()
+				for (const profile of readPayerProfiles()) {
+					const option = document.createElement('option')
+					option.value = profile.id
+					option.textContent = profile.name
+					select.append(option)
+				}
+				const randomOption = document.createElement('option')
+				randomOption.value = 'new'
+				randomOption.textContent = 'Novo pagador aleatório'
+				select.append(randomOption)
+				if ([...select.options].some((option) => option.value === selectedProfileId)) {
+					select.value = selectedProfileId
+				}
+			}
+
+			function validatePayerDocument(value) {
+				if (!/^\d{3}\.\d{3}\.\d{3}-\d{2}$/.test(value)) {
+					throw new Error('Informe o CPF no formato 000.000.000-00.')
+				}
+			}
+
+			function addPayerProfile() {
+				const name = document
+					.querySelector('#new-payer-profile-name')
+					.value.trim()
+				const documentNumber = document
+					.querySelector('#new-payer-document-number')
+					.value.trim()
+				if (!name) {
+					showError('Informe um nome para identificar o perfil.')
+					return
+				}
+				try {
+					validatePayerDocument(documentNumber)
+				} catch (error) {
+					showError(error.message)
+					return
+				}
+
+				const profiles = readPayerProfiles().filter(
+					(profile) => profile.id !== DEFAULT_PAYER_PROFILE.id,
+				)
+				if (
+					[DEFAULT_PAYER_PROFILE, ...profiles].some(
+						(profile) =>
+							profile.documentNumber === documentNumber ||
+							profile.name.toLocaleLowerCase() === name.toLocaleLowerCase(),
+					)
+				) {
+					showError('Já existe um perfil com esse nome ou CPF.')
+					return
+				}
+
+				const profile = {
+					id: crypto.randomUUID(),
+					name,
+					documentNumber,
+				}
+				try {
+					localStorage.setItem(
+						PAYER_PROFILES_KEY,
+						JSON.stringify([...profiles, profile]),
+					)
+				} catch {
+					showError('Não foi possível salvar o perfil neste navegador.')
+					return
+				}
+				renderPayerProfiles()
+				document.querySelector('#example-payer').value = profile.id
+				document.querySelector('#new-payer-profile-name').value = ''
+				document.querySelector('#new-payer-document-number').value = ''
+				document
+					.querySelector('#new-payer-profile')
+					.classList.add('hidden')
+				document
+					.querySelector('#new-payer-profile-document')
+					.classList.add('hidden')
+				document
+					.querySelector('#save-payer-profile-control')
+					.classList.add('hidden')
+				clearError()
+			}
+
+			function randomCpfLikeDocument() {
+				const digits = String(
+					crypto.getRandomValues(new Uint32Array(1))[0] % 100000000000,
+				).padStart(11, '0')
+				return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`
+			}
+
+			function createExample() {
+				const now = new Date()
+				const date = (daysAgo) =>
+					new Date(now.getTime() - daysAgo * 86400000).toISOString()
+				const payerProfileId = document.querySelector('#example-payer').value
+				const isNewPayer = payerProfileId === 'new'
+				const payerProfile = readPayerProfiles().find(
+					(profile) => profile.id === payerProfileId,
+				)
+				const isNewDevice =
+					document.querySelector('#example-device').value === 'new'
+				const isNewLocation =
+					document.querySelector('#example-location').value === 'new'
+				const isNewDestination =
+					document.querySelector('#example-destination').value === 'new'
+				const isRecentDestination =
+					document.querySelector('#example-destination-age').value === 'new'
+				const amount = Number(document.querySelector('#example-amount').value)
+				if (!Number.isSafeInteger(amount) || amount < 1) {
+					throw new Error('Informe um valor inteiro positivo em centavos.')
+				}
+
+				return {
+					id: `pix-${crypto.randomUUID()}`,
+					amount,
+					transaction_date: now.toISOString(),
+					source_account: {
+						branch: '0001',
+						account_number: '88213',
+						opening_date: date(365),
+						owner: {
+							document_number: isNewPayer
+								? randomCpfLikeDocument()
+								: payerProfile.documentNumber,
+						},
+					},
+					destination_account: {
+						participant: '60701190',
+						branch: '3675',
+						account_number: isNewDestination
+							? crypto.randomUUID().replaceAll('-', '').slice(0, 12)
+							: 'playground-known-account',
+						opening_date: date(isRecentDestination ? 1 : 365),
+						owner: { document_number: '987.654.321-00' },
+					},
+					source: {
+						device_id: isNewDevice
+							? `dvc-${crypto.randomUUID()}`
+							: 'playground-known-device',
+						channel: 'app',
+						ip: '198.51.100.23',
+						geolocation: isNewLocation
+							? { latitude: -22.9068, longitude: -43.1729 }
+							: { latitude: -23.56, longitude: -46.65 },
+					},
+				}
+			}
+
+			function readHistory() {
+				try {
+					const items = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]')
+					return Array.isArray(items)
+						? items
+								.filter((item) => item && typeof item.id === 'string')
+								.slice(0, 10)
+						: []
+				} catch {
+					return []
+				}
+			}
+
+			function saveHistory(items) {
+				try {
+					localStorage.setItem(HISTORY_KEY, JSON.stringify(items.slice(0, 10)))
+				} catch {
+					showError('Não foi possível salvar o histórico local do navegador.')
+				}
+			}
+
+			function renderHistory() {
+				const items = readHistory()
+				const container = document.querySelector('#history')
+				container.replaceChildren()
+				if (!items.length) {
+					const empty = document.createElement('p')
+					empty.className = 'result-empty'
+					empty.textContent = 'As análises feitas aqui aparecerão nesta lista.'
+					container.append(empty)
+					return
+				}
+				for (const item of items) {
+					const button = document.createElement('button')
+					button.type = 'button'
+					button.className = 'history-item'
+					const id = document.createElement('span')
+					id.className = 'history-id'
+					id.textContent = item.id
+					const status = document.createElement('span')
+					status.className = 'history-status'
+					status.textContent = item.status || 'consultar'
+					button.append(id, status)
+					button.addEventListener('click', () => {
+						document.querySelector('#lookup-id').value = item.id
+						lookupAnalysis(item.id)
+					})
+					container.append(button)
+				}
+			}
+
+			function rememberAnalysis(id, status) {
+				const items = readHistory().filter((item) => item.id !== id)
+				items.unshift({ id, status })
+				saveHistory(items)
+				renderHistory()
+			}
+
+			function showError(message) {
+				formError.textContent = message
+				formError.classList.remove('hidden')
+			}
+
+			function clearError() {
+				formError.textContent = ''
+				formError.classList.add('hidden')
+			}
+
+			function escapeHtml(value) {
+				return String(value).replace(
+					/[&<>"']/g,
+					(character) =>
+						({
+							'&': '&amp;',
+							'<': '&lt;',
+							'>': '&gt;',
+							'"': '&quot;',
+							"'": '&#39;',
+						})[character],
+				)
+			}
+
+			function renderAnalysis(data, transactionId) {
+				const metadata =
+					data && data.metadata && typeof data.metadata === 'object'
+						? data.metadata
+						: {}
+				const hasScore = Number.isFinite(metadata.fraud_score)
+				const score = hasScore
+					? Math.max(0, Math.min(1, metadata.fraud_score))
+					: null
+				const percent = score === null ? null : Math.round(score * 100)
+				const status =
+					typeof data.status === 'string' ? data.status : 'indisponível'
+				const reasons = Array.isArray(metadata.reasons) ? metadata.reasons : []
+				const barClass = score >= 0.7 ? 'high' : score >= 0.3 ? 'medium' : ''
+				const scoreSourceLabels = {
+					payer_approved_history: 'histórico do pagador',
+					global_approved_history: 'padrão global',
+					paysim_or_labeled_global_model: 'classificador global',
+				}
+				const scoreSource =
+					scoreSourceLabels[metadata.score_source] || metadata.score_source
+				result.innerHTML = `
+          <div class="result-top">
+            <div>
+              <span class="status status-${escapeHtml(status)}">${escapeHtml(status)}</span>
+              ${
+								hasScore
+									? `<div class="score">${percent}%</div><div class="score-caption">score demonstrativo de fraude</div>`
+									: `<p class="result-empty">Esta resposta não contém score de fraude.</p>`
+							}
+            </div>
+            ${
+							metadata.decision_layer
+								? `<span class="history-status">${escapeHtml(metadata.decision_layer)}</span>`
+								: ''
+						}
+          </div>
+          ${hasScore ? `<div class="meter" role="img" aria-label="Score de fraude: ${percent}%"><div class="meter-fill ${barClass}" style="width:${percent}%"></div></div>` : ''}
+          ${
+						metadata.location_velocity
+							? `<p class="result-meta">Deslocamento estimado: ${escapeHtml(metadata.location_velocity.distance_km)} km em ${escapeHtml(metadata.location_velocity.speed_kmh)} km/h (limite: ${escapeHtml(metadata.location_velocity.threshold_kmh)} km/h)</p>`
+							: ''
+					}
+          ${scoreSource ? `<p class="result-meta">Score baseado em: ${escapeHtml(scoreSource)}${Number.isFinite(metadata.behavior_model?.history_transactions) ? ` (${metadata.behavior_model.history_transactions} transações)` : ''}</p>` : ''}
+          <div class="reasons">${
+						reasons.length
+							? reasons
+									.map(
+										(reason) =>
+											`<span class="reason">${escapeHtml(reason)}</span>`,
+									)
+									.join('')
+							: `<span class="result-meta">Sem motivos informados</span>`
+					}</div>
+          <div class="result-meta">ID: ${escapeHtml(transactionId || 'não informado')}</div>
+          ${data.key ? `<div class="result-meta">Chave da análise: ${escapeHtml(data.key)}</div>` : ''}
+          ${
+						status === 'two_factor_required' && PIX_DEV_MODE
+							? `<div class="actions"><button class="button button-primary" id="accept-two-factor-button" type="button">Confirmar 2FA mock (dev)</button></div><p class="result-meta">Uma única confirmação simulada cobre os motivos de 2FA desta análise. Disponível apenas em modo de desenvolvimento; não é uma verificação real de identidade.</p>`
+							: ''
+					}
+          <pre>${escapeHtml(JSON.stringify(data, null, 2))}</pre>
+        `
+				const acceptTwoFactorButton = document.querySelector(
+					'#accept-two-factor-button',
+				)
+				if (acceptTwoFactorButton) {
+					acceptTwoFactorButton.addEventListener('click', () =>
+						verifyTwoFactor(transactionId),
+					)
+				}
+			}
+
+			async function apiRequest(path, options = {}) {
+				const token = tokenInput.value.trim()
+				if (!token) {
+					throw new Error('Informe o INTERNAL-TOKEN para chamar a API.')
+				}
+				const response = await fetch(path, {
+					...options,
+					headers: {
+						'INTERNAL-TOKEN': token,
+						...(options.headers || {}),
+					},
+				})
+				const text = await response.text()
+				let data
+				try {
+					data = text ? JSON.parse(text) : {}
+				} catch {
+					data = { detail: text || 'Resposta sem conteúdo JSON.' }
+				}
+				if (!response.ok) {
+					const detail =
+						data.translation ||
+						data.description ||
+						data.detail ||
+						response.statusText
+					throw new Error(`HTTP ${response.status}: ${detail}`)
+				}
+				return data
+			}
+
+			async function submitTransaction() {
+				clearError()
+				let payload
+				try {
+					payload = JSON.parse(payloadInput.value)
+				} catch (error) {
+					showError(`JSON inválido: ${error.message}`)
+					return
+				}
+				if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+					showError('O payload deve ser um objeto JSON.')
+					return
+				}
+
+				sendButton.disabled = true
+				sendButton.textContent = 'Analisando…'
+				try {
+					const data = await apiRequest('/pix/transaction', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify(payload),
+					})
+					renderAnalysis(data, payload.id)
+					if (typeof payload.id === 'string')
+						rememberAnalysis(payload.id, data.status)
+				} catch (error) {
+					showError(error.message)
+					result.innerHTML = `<p class="result-empty">A API retornou um erro.</p><pre>${escapeHtml(error.message)}</pre>`
+				} finally {
+					sendButton.disabled = false
+					sendButton.textContent = 'Analisar transação'
+				}
+			}
+
+			async function lookupAnalysis(transactionId) {
+				clearError()
+				const id = (
+					transactionId || document.querySelector('#lookup-id').value
+				).trim()
+				if (!id) {
+					showError('Informe o ID da transação que deseja consultar.')
+					return
+				}
+				lookupButton.disabled = true
+				try {
+					const data = await apiRequest(
+						`/pix/transaction/${encodeURIComponent(id)}`,
+					)
+					renderAnalysis(data, id)
+					rememberAnalysis(id, data.status)
+				} catch (error) {
+					showError(error.message)
+					result.innerHTML = `<p class="result-empty">Não foi possível buscar esta análise.</p><pre>${escapeHtml(error.message)}</pre>`
+				} finally {
+					lookupButton.disabled = false
+				}
+			}
+
+			async function verifyTwoFactor(transactionId) {
+				clearError()
+				const button = document.querySelector('#accept-two-factor-button')
+				if (!button || !transactionId) {
+					showError('Não foi possível identificar a transação que aguarda 2FA.')
+					return
+				}
+				button.disabled = true
+				button.textContent = 'Confirmando…'
+				try {
+					const data = await apiRequest(
+						`/pix/transaction/${encodeURIComponent(transactionId)}/verify-two-factor`,
+						{ method: 'POST' },
+					)
+					renderAnalysis(data, transactionId)
+					rememberAnalysis(transactionId, data.status)
+				} catch (error) {
+					showError(error.message)
+					button.disabled = false
+					button.textContent = 'Confirmar 2FA mock (dev)'
+				}
+			}
+
+			document
+				.querySelector('#example-button')
+				.addEventListener('click', () => {
+					try {
+						payloadInput.value = JSON.stringify(createExample(), null, 2)
+						clearError()
+					} catch (error) {
+						showError(error.message)
+					}
+				})
+			document
+				.querySelector('#add-payer-profile-button')
+				.addEventListener('click', () => {
+					document
+						.querySelector('#new-payer-profile')
+						.classList.remove('hidden')
+					document
+						.querySelector('#new-payer-profile-document')
+						.classList.remove('hidden')
+					document
+						.querySelector('#save-payer-profile-control')
+						.classList.remove('hidden')
+					document.querySelector('#new-payer-profile-name').focus()
+				})
+			document
+				.querySelector('#save-payer-profile-button')
+				.addEventListener('click', addPayerProfile)
+			document
+				.querySelector('#example-payer')
+				.addEventListener('change', () => {
+					try {
+						payloadInput.value = JSON.stringify(createExample(), null, 2)
+						clearError()
+					} catch (error) {
+						showError(error.message)
+					}
+				})
+			sendButton.addEventListener('click', submitTransaction)
+			lookupButton.addEventListener('click', () => lookupAnalysis())
+			renderPayerProfiles()
+			payloadInput.value = JSON.stringify(createExample(), null, 2)
+			renderHistory()
+		</script>
+	</body>
+</html>
