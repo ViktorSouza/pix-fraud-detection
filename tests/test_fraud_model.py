@@ -85,6 +85,24 @@ def test_existing_rules_can_only_escalate_model_decisions():
     assert model_reasons == []
 
 
+def test_multiple_layer_four_rules_require_only_one_two_factor_decision():
+    status, layer, model_reasons = combine_decisions(
+        fraud_score=0.1,
+        rejection_reasons=[],
+        two_factor_reasons=[
+            "amount_requires_confirmation",
+            "new_device_for_payer",
+            "high_transaction_velocity",
+        ],
+        two_factor_threshold=0.30,
+        reject_threshold=0.70,
+    )
+
+    assert status == "two_factor_required"
+    assert layer == "level_4_rules"
+    assert model_reasons == []
+
+
 def test_model_rejection_can_escalate_a_transaction():
     status, layer, model_reasons = combine_decisions(
         fraud_score=0.8,
@@ -97,6 +115,21 @@ def test_model_rejection_can_escalate_a_transaction():
     assert status == "rejected"
     assert layer == "global_classifier_fallback"
     assert model_reasons == ["model_fraud_score_over_rejection_threshold"]
+
+
+def test_payer_behavior_anomaly_requires_two_factor_above_rejection_threshold():
+    status, layer, model_reasons = combine_decisions(
+        fraud_score=0.999994,
+        rejection_reasons=[],
+        two_factor_reasons=[],
+        two_factor_threshold=0.30,
+        reject_threshold=0.70,
+        model_layer="payer_behavior_anomaly",
+    )
+
+    assert status == "two_factor_required"
+    assert layer == "payer_behavior_anomaly"
+    assert model_reasons == ["model_fraud_score_requires_confirmation"]
 
 
 def test_hard_rejection_remains_authoritative():

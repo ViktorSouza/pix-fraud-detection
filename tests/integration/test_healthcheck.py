@@ -34,6 +34,11 @@ class TestHealthCheck:
         assert b'for="new-payer-profile-name"' in response.response_content
         assert b'for="new-payer-document-number"' in response.response_content
         assert b'id="save-payer-profile-button"' in response.response_content
+        assert b"Confirmar 2FA mock (dev)" in response.response_content
+        assert (
+            "Uma única confirmação simulada cobre os motivos de 2FA".encode()
+            in response.response_content
+        )
         assert b'for="example-device"' in response.response_content
         assert b'for="example-location"' in response.response_content
         assert b'for="example-destination"' in response.response_content

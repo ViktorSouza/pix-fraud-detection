@@ -257,8 +257,10 @@ identidade nem uma liquidação Pix. Como o `INTERNAL-TOKEN` autentica apenas o
 serviço chamador, qualquer integração de produção precisará validar um
 desafio/OTP confiável antes de aprovar a transação.
 
-No Playground, quando o ambiente permite a simulação, análises pendentes de
-2FA exibem o botão **Aceitar 2FA e aprovar (dev)**.
+No Playground, quando o ambiente permite a simulação, uma análise pendente de
+2FA exibe uma única ação, **Confirmar 2FA mock (dev)**, mesmo que mais de um
+motivo da camada 4 tenha sido acionado. A ação apenas simula a conclusão do
+desafio e não representa uma verificação real de identidade.
 
 ## Como rodar e testar
 

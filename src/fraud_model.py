@@ -143,6 +143,9 @@ def combine_decisions(
         two_factor_threshold=two_factor_threshold,
         reject_threshold=reject_threshold,
     )
+    if model_layer == "payer_behavior_anomaly" and model_status == "rejected":
+        model_status = "two_factor_required"
+
     if model_status == "rejected":
         model_reasons = ["model_fraud_score_over_rejection_threshold"]
     elif model_status == "two_factor_required":

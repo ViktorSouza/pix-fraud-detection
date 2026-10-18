@@ -927,7 +927,7 @@
           ${data.key ? `<div class="result-meta">Chave da análise: ${escapeHtml(data.key)}</div>` : ''}
           ${
 						status === 'two_factor_required' && PIX_DEV_MODE
-							? `<div class="actions"><button class="button button-primary" id="accept-two-factor-button" type="button">Aceitar 2FA e aprovar (dev)</button></div>`
+							? `<div class="actions"><button class="button button-primary" id="accept-two-factor-button" type="button">Confirmar 2FA mock (dev)</button></div><p class="result-meta">Uma única confirmação simulada cobre os motivos de 2FA desta análise. Disponível apenas em modo de desenvolvimento; não é uma verificação real de identidade.</p>`
 							: ''
 					}
           <pre>${escapeHtml(JSON.stringify(data, null, 2))}</pre>
@@ -1049,7 +1049,7 @@
 				} catch (error) {
 					showError(error.message)
 					button.disabled = false
-					button.textContent = 'Aceitar 2FA e aprovar (dev)'
+					button.textContent = 'Confirmar 2FA mock (dev)'
 				}
 			}
 
