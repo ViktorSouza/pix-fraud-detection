@@ -312,6 +312,14 @@ docker compose exec -T db psql -U bootcamp -d bootcamp \
   -c "ALTER TABLE pix_transaction ALTER COLUMN amount TYPE BIGINT"
 ```
 
+Para bancos já inicializados, aplique também a remoção das colunas
+`created_at` não utilizadas sem recriar nem apagar as tabelas:
+
+```bash
+docker compose exec -T db psql -U bootcamp -d bootcamp \
+  < database/migrations/20261018_drop_unused_created_at_columns.sql
+```
+
 ## Arquitetura
 
 O fluxo segue as camadas do Base Service, sem lógica antifraude no

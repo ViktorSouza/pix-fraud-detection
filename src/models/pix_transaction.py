@@ -1,4 +1,13 @@
-from sqlalchemy import BigInteger, CHAR, Column, DateTime, Index, Integer, String, UniqueConstraint, func
+from sqlalchemy import (
+    BigInteger,
+    CHAR,
+    Column,
+    DateTime,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 
 from models.base import Base
@@ -18,10 +27,17 @@ class PixTransaction(Base):
     status = Column(String(32), nullable=False)
     transaction_data = Column(JSONB, nullable=False)
     analysis_metadata = Column("metadata", JSONB, nullable=False)
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
     __table_args__ = (
         UniqueConstraint("transaction_id"),
         UniqueConstraint("analysis_key"),
-        Index("ix_pix_transaction_source_date_status", "source_document_number", "transaction_date", "status"),
+        Index(
+            "ix_pix_transaction_source_date_status",
+            "source_document_number",
+            "transaction_date",
+            "status",
+        ),
     )

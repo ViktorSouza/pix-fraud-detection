@@ -2,7 +2,6 @@ import os
 import math
 from pathlib import Path
 
-
 SERVICE_ROOT = os.path.abspath(os.path.dirname(__file__))
 
 # Onde moram os arquivos de schema — os .json que descrevem o formato
@@ -23,7 +22,9 @@ INTERNAL_TOKEN = os.environ.get("INTERNAL_TOKEN")
 # produção, apontaria pro serviço de verdade. O código não sabe a
 # diferença, e esse é o ponto.
 BANKSLIP_API_URL = os.environ.get("BANKSLIP_API_URL", "http://localhost:8080")
-BANKSLIP_API_INTERNAL_TOKEN = os.environ.get("BANKSLIP_API_INTERNAL_TOKEN", "default_token")
+BANKSLIP_API_INTERNAL_TOKEN = os.environ.get(
+    "BANKSLIP_API_INTERNAL_TOKEN", "default_token"
+)
 
 # Quantos segundos esperar pelo serviço de boletos antes de desistir.
 # Todo connector TEM um timeout — o porquê está em
@@ -36,7 +37,7 @@ PIX_FRAUD_MODEL_PATH = os.environ.get(
 )
 PIX_TWO_FACTOR_THRESHOLD = float(os.environ.get("PIX_TWO_FACTOR_THRESHOLD", "0.30"))
 PIX_REJECT_THRESHOLD = float(os.environ.get("PIX_REJECT_THRESHOLD", "0.70"))
-PIX_MAX_LOCATION_SPEED_KMH = float(os.environ.get("PIX_MAX_LOCATION_SPEED_KMH", "3000"))
+PIX_MAX_LOCATION_SPEED_KMH = float(os.environ.get("PIX_MAX_LOCATION_SPEED_KMH", "900"))
 
 # Rotas públicas: não exigem o header INTERNAL-TOKEN. São as rotas que
 # precisam responder pra quem ainda não tem token nenhum: a raiz, que
@@ -58,7 +59,9 @@ def check_variables():
             "0 < two-factor < rejection < 1."
         )
     if not math.isfinite(PIX_MAX_LOCATION_SPEED_KMH) or PIX_MAX_LOCATION_SPEED_KMH <= 0:
-        raise EnvironmentError("PIX_MAX_LOCATION_SPEED_KMH deve ser um número positivo e finito.")
+        raise EnvironmentError(
+            "PIX_MAX_LOCATION_SPEED_KMH deve ser um número positivo e finito."
+        )
 
     missing = []
     for name in REQUIRED_VARIABLES:
