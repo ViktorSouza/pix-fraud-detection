@@ -26,6 +26,60 @@ si só, também não altera esse score. Os sinais positivos são combinados
 sem que um sinal benigno cancele outro. Regras determinísticas continuam
 podendo escalar a decisão e os vetos de limite continuam rejeitando.
 
+### Diagrama do pipeline completo
+
+```mermaid
+flowchart TD
+    A["POST /pix/transaction"] --> B["Camada 1 — validar schema, campos e ID"]
+    B --> C{"Payload válido e ID ainda não usado?"}
+    C -- Não --> X["Retornar erro; não criar análise"]
+    C -- Sim --> D["Ler histórico aprovado do pagador e contexto recente de 2FA"]
+
+    D --> E["Camada 2 — vetos rígidos<br/>Valor máximo por Pix e limite acumulado em 24h"]
+    E --> F["Camada 4 — regras de confirmação<br/>Valor, destino/aparelho novos, velocidade e localização"]
+    F --> G["Verificar amortização de 2FA<br/>Mesmo pagador/aparelho e janela de 30 min"]
+    G --> H{"2FA anterior confirmado recentemente?"}
+    H -- Sim --> I["Amortizar regras elegíveis<br/>Valor semelhante: ±25%; alta velocidade"]
+    H -- Não --> J["Manter regras de confirmação aplicáveis"]
+    I --> K["Camada 3 — calcular score de risco"]
+    J --> K
+
+    K --> L{"Histórico aprovado individual suficiente?"}
+    L -- Sim --> M["Modelo comportamental do pagador"]
+    L -- Não --> N{"Histórico aprovado global suficiente?"}
+    N -- Sim --> O["Modelo comportamental global"]
+    N -- Não --> P["Classificador configurado<br/>(PaySim ou Pix rotulado)"]
+
+    M --> Q["Combinar score, vetos rígidos e regras de 2FA"]
+    O --> Q
+    P --> Q
+    E --> Q
+    I --> Q
+    J --> Q
+    Q --> R{"Decisão final"}
+    R -- "Veto rígido ou rejeição do modelo" --> S["rejected"]
+    R -- "Sem rejeição; score ou regra pede confirmação" --> T["two_factor_required"]
+    R -- "Nenhuma condição de risco" --> U["approved"]
+
+    S --> V["Persistir análise, motivos e metadata"]
+    T --> V
+    U --> V
+    V --> W["Responder com key, status e metadata"]
+    W --> Y["GET /pix/transaction/{id}<br/>consulta a análise persistida"]
+    W --> Z{"Status two_factor_required<br/>e ambiente de desenvolvimento?"}
+    Z -- Sim --> AA["POST /pix/transaction/{id}/verify-two-factor"]
+    AA --> AB["Marcar confirmação simulada<br/>e atualizar status para approved"]
+    Z -- Não --> AC["Sem confirmação mock no Playground"]
+```
+
+O desenho mostra a ordem lógica de avaliação; as camadas 2, 3 e 4 são
+calculadas durante a mesma análise. A decisão dá prioridade aos vetos
+rígidos, depois à rejeição do modelo (exceto anomalia comportamental
+individual, que pede 2FA), e então à exigência de confirmação. O
+classificador configurado é fallback quando não há histórico comportamental
+suficiente. A confirmação mock só existe em desenvolvimento e não representa
+uma verificação real de identidade.
+
 ### Treinar e habilitar o modelo acadêmico
 
 Baixe o CSV do [PaySim1 no Kaggle](https://www.kaggle.com/datasets/ealaxi/paysim1)
