@@ -65,11 +65,14 @@ spoofing ou localização compartilhada não são tratados.
 
 O modelo individual é não supervisionado: não prevê o recebedor nem
 precisa de rótulos de fraude para aprender o padrão do pagador. Ele usa
-valor, horário, intervalo desde a transação anterior, velocidade estimada
+valor, período aproximado do dia, intervalo desde a transação anterior, velocidade estimada
 entre localizações conhecidas e novidade do aparelho. O intervalo é
-medido em horas e transformado com `log1p` para reduzir a influência de
-pausas muito longas; a presença/ausência de transação anterior também é
-um atributo separado. O destinatário é excluído do modelo individual;
+medido em horas, com precisão de um minuto, e transformado com `log1p`
+para reduzir a influência de pausas muito longas; o período do dia é
+agrupado em blocos de seis horas para evitar que segundos de diferença
+em uma rajada de Pix pareçam um comportamento completamente novo. A
+presença/ausência de transação anterior também é um atributo separado. O
+destinatário é excluído do modelo individual;
 novidade de destino continua coberta por uma regra determinística. Só
 transações aprovadas entram no histórico. O perfil individual requer pelo
 menos 50 registros; antes disso, a API tenta usar até 200 transações
@@ -205,8 +208,10 @@ Resposta:
       "history_transactions": 42,
       "feature_names": [
         "amount_log_reais",
-        "hour_sin",
-        "hour_cos",
+        "time_of_day_sin",
+        "time_of_day_cos",
+        "hours_since_last_transaction_log",
+        "has_previous_transaction",
         "travel_speed_log_kmh",
         "has_location_velocity",
         "is_new_device"

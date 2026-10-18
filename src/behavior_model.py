@@ -12,8 +12,8 @@ MIN_GLOBAL_HISTORY = 200
 MAX_PAYER_HISTORY = 300
 ANOMALY_FEATURE_NAMES = (
     "amount_log_reais",
-    "hour_sin",
-    "hour_cos",
+    "time_of_day_sin",
+    "time_of_day_cos",
     "hours_since_last_transaction_log",
     "has_previous_transaction",
     "travel_speed_log_kmh",
@@ -40,16 +40,21 @@ def _features_for_observation(
         + observation.transaction_date.second / 3600
         + observation.transaction_date.microsecond / 3_600_000_000
     )
-    angle = 2 * math.pi * hour / 24
+    time_of_day_block_hour = math.floor(hour / 6) * 6 + 3
+    angle = 2 * math.pi * time_of_day_block_hour / 24
     previous_observation = previous_observations[-1] if previous_observations else None
     hours_since_last_transaction = (
-        max(
-            0.0,
-            (
-                observation.transaction_date - previous_observation.transaction_date
-            ).total_seconds()
-            / 3600,
+        math.floor(
+            max(
+                0.0,
+                (
+                    observation.transaction_date
+                    - previous_observation.transaction_date
+                ).total_seconds(),
+            )
+            / 60,
         )
+        / 60
         if previous_observation is not None
         else 0.0
     )

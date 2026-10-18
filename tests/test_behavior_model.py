@@ -54,6 +54,59 @@ def test_features_include_log_elapsed_hours_since_previous_transaction():
     assert features[ANOMALY_FEATURE_NAMES.index("has_previous_transaction")] == 1
 
 
+def test_short_transaction_gaps_share_minute_precision():
+    previous = BehaviorObservation(
+        amount_cents=20_000,
+        transaction_date=datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc),
+        device_id="device-known",
+        latitude=-23.56,
+        longitude=-46.65,
+    )
+    current = BehaviorObservation(
+        amount_cents=20_000,
+        transaction_date=previous.transaction_date + timedelta(seconds=10),
+        device_id="device-known",
+        latitude=-23.56,
+        longitude=-46.65,
+    )
+
+    features = _features_for_observation(current, [previous])
+
+    assert features[ANOMALY_FEATURE_NAMES.index("hours_since_last_transaction_log")] == 0
+    assert features[ANOMALY_FEATURE_NAMES.index("time_of_day_sin")] == pytest.approx(
+        math.sin(2 * math.pi * 9 / 24)
+    )
+    assert features[ANOMALY_FEATURE_NAMES.index("time_of_day_cos")] == pytest.approx(
+        math.cos(2 * math.pi * 9 / 24)
+    )
+
+
+def test_ten_second_gap_after_rapid_history_is_not_an_extreme_anomaly():
+    start = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
+    history = [
+        BehaviorObservation(
+            amount_cents=20_000,
+            transaction_date=start + timedelta(seconds=index * 5),
+            device_id="device-known",
+            latitude=-23.56,
+            longitude=-46.65,
+        )
+        for index in range(50)
+    ]
+    current = BehaviorObservation(
+        amount_cents=20_000,
+        transaction_date=history[-1].transaction_date + timedelta(seconds=10),
+        device_id="device-known",
+        latitude=-23.56,
+        longitude=-46.65,
+    )
+
+    score = score_payer_behavior(history, current)
+
+    assert score is not None
+    assert score < 0.30
+
+
 def test_payer_model_scores_unusual_low_value_and_location_as_anomalous():
     history = _history()
     current = BehaviorObservation(
